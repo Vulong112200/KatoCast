@@ -60,14 +60,25 @@ Future<void> _runWeatherCheck() async {
   // 1. Vị trí: dùng last-known cho nhanh & tiết kiệm pin trong nền.
   final pos = await Geolocator.getLastKnownPosition();
   if (pos == null) return;
+  // Bỏ qua nếu vị trí quá cũ → tránh cảnh báo nhầm khu vực người dùng đã rời đi.
+  final age = DateTime.now().difference(pos.timestamp);
+  if (age > const Duration(hours: AppConfig.backgroundLastKnownMaxAgeHours)) {
+    return;
+  }
   final coords = Coordinates(latitude: pos.latitude, longitude: pos.longitude);
 
   // 2. Dựng dependency cục bộ cho isolate.
   final db = AppDatabase();
   try {
+    final local = WeatherLocalDataSource(db);
+    // Dọn cache cũ định kỳ (mỗi chu kỳ background) để DB không phình.
+    await local.purgeOlderThan(
+      const Duration(days: AppConfig.cacheMaxAgeDays),
+    );
+
     final repo = WeatherRepositoryImpl(
       WeatherRemoteDataSource(ApiClient.create()),
-      WeatherLocalDataSource(db),
+      local,
       NetworkInfoImpl(Connectivity()),
     );
 

@@ -52,5 +52,43 @@ class AppConfig {
   /// Thời gian cache thời tiết còn coi là "tươi" (phút).
   static const int cacheFreshnessMinutes = 30;
 
+  /// Cache thời tiết cũ hơn ngưỡng này (ngày) sẽ bị dọn để DB không phình.
+  static const int cacheMaxAgeDays = 7;
+
+  /// Vị trí "last known" cũ hơn ngưỡng này (giờ) coi là không đáng tin ở
+  /// background → bỏ qua lần check để tránh cảnh báo nhầm khu vực.
+  static const int backgroundLastKnownMaxAgeHours = 3;
+
+  // --- Định danh & endpoint dịch vụ ngoài ---
+
+  /// User-Agent định danh app (chính sách OSM/Overpass yêu cầu UA rõ ràng;
+  /// thiếu UA dễ bị chặn/giới hạn tốc độ). Dùng chung cho Overpass/tile/RSS.
+  static const String userAgent = 'KatoCast/1.0 (co.allexceed.katocast)';
+
+  /// Package name cho `userAgentPackageName` của flutter_map TileLayer.
+  static const String tilePackageName = 'co.allexceed.katocast';
+
+  /// Các mirror Overpass (OpenStreetMap) — thử lần lượt để chịu lỗi khi 1
+  /// endpoint quá tải/timeout/429. Tất cả miễn phí, không cần API key.
+  static const List<String> overpassEndpoints = [
+    'https://overpass-api.de/api/interpreter',
+    'https://overpass.kumi.systems/api/interpreter',
+    'https://lz4.overpass-api.de/api/interpreter',
+    'https://overpass.openstreetmap.fr/api/interpreter',
+  ];
+
+  /// Tile bản đồ nền OpenStreetMap.
+  static const String osmTileUrl =
+      'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+
+  /// Lớp phủ lượng mưa OpenWeatherMap (cần `owmApiKey`).
+  static String get owmPrecipTileUrl =>
+      'https://tile.openweathermap.org/map/precipitation_new/{z}/{x}/{y}.png'
+      '?appid=$owmApiKey';
+
+  /// RSS tin thời tiết (VnExpress) — không cần key.
+  static const String rssWeatherFeedUrl =
+      'https://vnexpress.net/rss/thoi-tiet.rss';
+
   static bool get hasApiKey => owmApiKey.isNotEmpty;
 }

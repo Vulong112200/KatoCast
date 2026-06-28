@@ -101,6 +101,8 @@ class WeatherMapper {
         '${w['icon'] ?? ''}',
       );
     }
-    return (0, '', '');
+    // Thiếu weather[] → mặc định 800 (trời quang) thay vì 0 (mã không hợp lệ)
+    // để tránh phân loại nhầm thành "Thời tiết / other".
+    return (800, '', '');
   }
 }

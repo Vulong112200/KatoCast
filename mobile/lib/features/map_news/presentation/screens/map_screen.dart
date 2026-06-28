@@ -42,15 +42,14 @@ class MapScreen extends ConsumerWidget {
       options: MapOptions(initialCenter: center, initialZoom: 11),
       children: [
         TileLayer(
-          urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-          userAgentPackageName: 'com.katocast.app',
+          urlTemplate: AppConfig.osmTileUrl,
+          userAgentPackageName: AppConfig.tilePackageName,
         ),
         // Lớp phủ lượng mưa từ OpenWeatherMap (dùng lại API key đã có).
         if (AppConfig.hasApiKey)
           TileLayer(
-            urlTemplate:
-                'https://tile.openweathermap.org/map/precipitation_new/{z}/{x}/{y}.png?appid=${AppConfig.owmApiKey}',
-            userAgentPackageName: 'com.katocast.app',
+            urlTemplate: AppConfig.owmPrecipTileUrl,
+            userAgentPackageName: AppConfig.tilePackageName,
           ),
         MarkerLayer(
           markers: [

@@ -1,5 +1,8 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 
+import '../../../../core/config/app_config.dart';
+import '../../../../core/error/exceptions.dart';
 import '../../domain/entities/poi.dart';
 import '../../domain/entities/route_point.dart';
 
@@ -19,16 +22,19 @@ class OverpassPoi {
 }
 
 /// Truy vấn tiện ích (POI) từ Overpass API của OpenStreetMap — MIỄN PHÍ,
-/// không cần API key. Dùng Dio riêng (base URL Overpass, khác OWM).
+/// không cần API key. Dùng Dio riêng (khác OWM); thử lần lượt nhiều mirror
+/// để chịu lỗi khi 1 endpoint quá tải/timeout/429.
 class OverpassDataSource {
   final Dio _dio;
+  final List<String> _endpoints;
 
-  OverpassDataSource({Dio? dio})
-      : _dio = dio ??
+  OverpassDataSource({Dio? dio, List<String>? endpoints})
+      : _endpoints = endpoints ?? AppConfig.overpassEndpoints,
+        _dio = dio ??
             Dio(BaseOptions(
-              baseUrl: 'https://overpass-api.de/api',
               connectTimeout: const Duration(seconds: 15),
               receiveTimeout: const Duration(seconds: 25),
+              headers: const {'User-Agent': AppConfig.userAgent},
             ));
 
   /// Tag OSM amenity/shop tương ứng từng PoiType.
@@ -49,20 +55,47 @@ class OverpassDataSource {
     if (points.isEmpty || types.isEmpty) return [];
 
     final query = _buildQuery(points, radiusMeters, types);
-    final res = await _dio.post<dynamic>(
-      '/interpreter',
-      data: 'data=${Uri.encodeQueryComponent(query)}',
-      options: Options(
-        contentType: 'application/x-www-form-urlencoded',
-        responseType: ResponseType.json,
-      ),
+    final body = 'data=${Uri.encodeQueryComponent(query)}';
+
+    // Thử lần lượt từng mirror; chỉ ném lỗi khi TẤT CẢ đều fail.
+    Object? lastError;
+    for (final endpoint in _endpoints) {
+      try {
+        final res = await _dio.post<dynamic>(
+          endpoint,
+          data: body,
+          options: Options(
+            contentType: 'application/x-www-form-urlencoded',
+            responseType: ResponseType.json,
+          ),
+        );
+
+        final data = res.data;
+        // Response không phải JSON hợp lệ (429/504 thường trả HTML/text) →
+        // coi như mirror lỗi, thử mirror kế tiếp.
+        if (data is! Map || data['elements'] is! List) {
+          lastError = const ServerException('Overpass trả dữ liệu không hợp lệ');
+          continue;
+        }
+        return _parseElements(data['elements'] as List, types);
+      } on DioException catch (e) {
+        lastError = e;
+        continue;
+      }
+    }
+
+    // Hết mirror mà vẫn lỗi → ném ServerException để UI hiển thị đúng nguyên nhân.
+    debugPrint('Overpass: tất cả mirror đều fail. Lỗi cuối: $lastError');
+    throw const ServerException(
+      'Dịch vụ bản đồ (Overpass) đang quá tải hoặc không phản hồi. '
+      'Vui lòng thử lại sau ít phút.',
     );
+  }
 
-    final data = res.data;
-    if (data is! Map || data['elements'] is! List) return [];
-
+  /// Parse danh sách `elements` JSON của Overpass → POI thô.
+  List<OverpassPoi> _parseElements(List elements, List<PoiType> types) {
     final out = <OverpassPoi>[];
-    for (final el in (data['elements'] as List)) {
+    for (final el in elements) {
       if (el is! Map) continue;
       final tags = el['tags'];
       if (tags is! Map) continue;

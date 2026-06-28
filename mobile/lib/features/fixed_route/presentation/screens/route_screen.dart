@@ -3,6 +3,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../../../../core/config/app_config.dart';
 import '../../../location/presentation/providers/location_provider.dart';
 import '../../domain/entities/poi.dart';
 import '../providers/route_provider.dart';
@@ -96,8 +97,8 @@ class _RouteScreenState extends ConsumerState<RouteScreen> {
       ),
       children: [
         TileLayer(
-          urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-          userAgentPackageName: 'com.katocast.app',
+          urlTemplate: AppConfig.osmTileUrl,
+          userAgentPackageName: AppConfig.tilePackageName,
         ),
         if (state.points.length >= 2)
           PolylineLayer(
@@ -226,10 +227,16 @@ class _RouteScreenState extends ConsumerState<RouteScreen> {
       );
     }
     if (state.pois.isEmpty) {
+      // Đã quét xong nhưng không có kết quả ≠ chưa quét.
+      final message = state.scanned
+          ? 'Không tìm thấy tiện ích nào trong bán kính $_radius m. '
+              'Thử tăng bán kính hoặc chọn loại khác.'
+          : '${state.points.length} điểm lộ trình. '
+              'Chọn loại tiện ích và nhấn Quét.';
       return Center(
-        child: Text(
-          '${state.points.length} điểm lộ trình. Chọn loại tiện ích và nhấn Quét.',
-          textAlign: TextAlign.center,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Text(message, textAlign: TextAlign.center),
         ),
       );
     }

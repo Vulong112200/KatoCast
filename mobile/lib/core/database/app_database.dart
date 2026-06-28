@@ -19,8 +19,8 @@ class WeatherCache extends Table {
   Set<Column> get primaryKey => {locationKey};
 }
 
-/// MODULE 2 (Phase 2) — lộ trình cố định (nơi làm việc → nhà).
-/// Bảng này dùng được NGAY để lưu danh sách toạ độ; phần quét POI là stub.
+/// MODULE 2 — lộ trình cố định (nơi làm việc → nhà). Lưu danh sách toạ độ;
+/// quét POI dọc lộ trình qua Overpass/OSM (đã hoạt động đầy đủ).
 class FixedRoutePoints extends Table {
   IntColumn get id => integer().autoIncrement()();
 

@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:drift/drift.dart';
+
 import '../../../../core/database/app_database.dart';
 import '../../../location/domain/entities/coordinates.dart';
 
@@ -27,5 +29,14 @@ class WeatherLocalDataSource {
     if (row == null) return null;
     final json = jsonDecode(row.payloadJson) as Map<String, dynamic>;
     return (json, row.fetchedAt);
+  }
+
+  /// Xoá các dòng cache cũ hơn [maxAge] để DB không phình theo thời gian
+  /// (cache chỉ ghi đè theo toạ độ; toạ độ cũ không bao giờ tự biến mất).
+  Future<void> purgeOlderThan(Duration maxAge) async {
+    final cutoff = DateTime.now().subtract(maxAge);
+    await (_db.delete(_db.weatherCache)
+          ..where((t) => t.fetchedAt.isSmallerThanValue(cutoff)))
+        .go();
   }
 }

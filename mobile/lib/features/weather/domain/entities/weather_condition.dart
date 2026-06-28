@@ -51,13 +51,31 @@ class WeatherCondition {
     required this.emoji,
   });
 
+  // --- Mã điều kiện OpenWeatherMap (https://openweathermap.org/weather-conditions) ---
+
+  /// Dông mạnh: dông kèm mưa to/rất to (211 nặng hạt, 212 dữ dội, 221 thất thường).
+  static const Set<int> kSevereThunderstormIds = {211, 212, 221};
+
+  /// Mưa cực to: 503 (rất nặng hạt), 504 (cực lớn), 522/531 (mưa rào dữ dội/thất thường).
+  static const Set<int> kExtremeRainIds = {503, 504, 522, 531};
+
+  /// Mưa to: 502 (nặng hạt), 521 (mưa rào nặng).
+  static const Set<int> kHeavyRainIds = {502, 521};
+
+  /// Mã lốc xoáy (nhóm 7xx khí quyển).
+  static const int kTornadoId = 781;
+
+  /// Ngưỡng lượng mưa (mm/h) nâng cấp cường độ.
+  static const double kRainMmHSevere = 7.6; // rất to
+  static const double kRainMmHHeavy = 2.5; // to
+
   /// Phân loại từ mã điều kiện. [rainMmH] (nếu có) giúp tinh chỉnh cường độ mưa.
   factory WeatherCondition.classify(int conditionId, {double rainMmH = 0}) {
     // --- 2xx: Dông/giông ---
     if (conditionId >= 200 && conditionId < 300) {
-      // 211/212/221 (dông mạnh) hoặc kèm mưa lớn → bão lớn.
-      const severeIds = {211, 212, 221};
-      if (severeIds.contains(conditionId) || rainMmH >= 7.6) {
+      // Dông mạnh hoặc kèm mưa lớn → bão lớn.
+      if (kSevereThunderstormIds.contains(conditionId) ||
+          rainMmH >= kRainMmHSevere) {
         return const WeatherCondition(
           category: WeatherCategory.severeStorm,
           severity: WeatherSeverity.severe,
@@ -90,7 +108,7 @@ class WeatherCondition {
     // --- 5xx: Mưa (chia cường độ) ---
     if (conditionId >= 500 && conditionId < 600) {
       // Cực to: 503, 504, 522, 531 hoặc lượng mưa rất lớn.
-      if (const {503, 504, 522, 531}.contains(conditionId) || rainMmH >= 7.6) {
+      if (kExtremeRainIds.contains(conditionId) || rainMmH >= kRainMmHSevere) {
         return const WeatherCondition(
           category: WeatherCategory.heavyRain,
           severity: WeatherSeverity.severe,
@@ -101,7 +119,7 @@ class WeatherCondition {
         );
       }
       // To: 502, 521.
-      if (const {502, 521}.contains(conditionId) || rainMmH >= 2.5) {
+      if (kHeavyRainIds.contains(conditionId) || rainMmH >= kRainMmHHeavy) {
         return const WeatherCondition(
           category: WeatherCategory.heavyRain,
           severity: WeatherSeverity.warning,
@@ -143,7 +161,7 @@ class WeatherCondition {
 
     // --- 7xx: Khí quyển (sương mù, bụi, lốc xoáy) ---
     if (conditionId >= 700 && conditionId < 800) {
-      if (conditionId == 781) {
+      if (conditionId == kTornadoId) {
         return const WeatherCondition(
           category: WeatherCategory.severeStorm,
           severity: WeatherSeverity.severe,

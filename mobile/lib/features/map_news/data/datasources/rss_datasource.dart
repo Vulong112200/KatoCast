@@ -1,6 +1,8 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:xml/xml.dart';
 
+import '../../../../core/config/app_config.dart';
 import '../../domain/repositories/news_repository.dart';
 
 /// Đọc tin tức thời tiết/cảnh báo từ RSS (miễn phí, không cần API key).
@@ -16,10 +18,11 @@ class RssDataSource {
               connectTimeout: const Duration(seconds: 12),
               receiveTimeout: const Duration(seconds: 15),
               responseType: ResponseType.plain,
+              headers: const {'User-Agent': AppConfig.userAgent},
             ));
 
   /// Nguồn RSS mặc định: chuyên mục thời tiết VnExpress.
-  static const String defaultFeedUrl = 'https://vnexpress.net/rss/thoi-tiet.rss';
+  static const String defaultFeedUrl = AppConfig.rssWeatherFeedUrl;
 
   /// Lấy danh sách tin từ một feed RSS. Trả [] nếu lỗi mạng/parse.
   Future<List<NewsItem>> fetchFeed({String? feedUrl, int limit = 20}) async {
@@ -43,7 +46,9 @@ class RssDataSource {
         ));
       }
       return out;
-    } catch (_) {
+    } catch (e) {
+      // Không chặn UI bản đồ; chỉ log để chẩn đoán khi feed đổi định dạng.
+      debugPrint('RSS fetchFeed lỗi: $e');
       return [];
     }
   }

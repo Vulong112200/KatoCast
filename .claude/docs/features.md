@@ -58,7 +58,7 @@
 - **Status:** ✅ done
 - **Backend:** — (Overpass/OSM, miễn phí, không key)
 - **Mobile:** entities `RoutePoint`, `Poi` · `RouteLocalDataSource` (Drift CRUD) · `OverpassDataSource` (Dio riêng → Overpass QL) · `PoiRepositoryImpl` · providers `routeLocalDataSourceProvider`, `overpassDataSourceProvider`, `poiRepositoryProvider`, `routeControllerProvider` (StateNotifier) · `RouteScreen` (`/routes`, flutter_map) · widget `poi_visuals` (icon/màu/nhãn theo PoiType)
-- **Key logic:** chạm bản đồ / "Thêm vị trí" → lưu `RoutePoint` (Drift, routeId `default`). `scanPoisAlongRoute`: Overpass QL `around:radius` cho mỗi (điểm × loại), `out center` (bắt cả node & way); map tag OSM (`amenity=restaurant/fuel/cafe`, `shop=supermarket`) → `PoiType`; khử trùng theo toạ độ làm tròn + loại; `distanceToRouteMeters` = khoảng cách tới điểm lộ trình gần nhất (`Geolocator.distanceBetween`); lọc trong bán kính, sắp xếp theo độ gần.
+- **Key logic:** chạm bản đồ / "Thêm vị trí" → lưu `RoutePoint` (Drift, routeId `default`). `scanPoisAlongRoute`: Overpass QL `around:radius` cho mỗi (điểm × loại), `out center` (bắt cả node & way); map tag OSM (`amenity=restaurant/fuel/cafe`, `shop=supermarket`) → `PoiType`; khử trùng theo toạ độ làm tròn + loại; `distanceToRouteMeters` = khoảng cách tới điểm lộ trình gần nhất (`Geolocator.distanceBetween`); lọc trong bán kính, sắp xếp theo độ gần. **Chịu lỗi mạng:** `OverpassDataSource` thử lần lượt nhiều mirror (`AppConfig.overpassEndpoints`) + gửi `User-Agent`; hết mirror/response sai shape → ném `ServerException`, controller hiển thị qua `extractUserMessage` (không nuốt lỗi). `RouteState.scanned` phân biệt "chưa quét" với "quét xong nhưng rỗng".
 
 ---
 

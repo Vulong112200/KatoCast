@@ -1,6 +1,8 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/di/providers.dart';
+import '../../../../shared/utils/error_handler.dart';
 import '../../data/datasources/overpass_datasource.dart';
 import '../../data/datasources/route_local_datasource.dart';
 import '../../data/repositories/poi_repository_impl.dart';
@@ -32,12 +34,16 @@ class RouteState {
   final List<RoutePoint> points;
   final List<Poi> pois;
   final bool scanning;
+
+  /// Đã chạy quét ít nhất 1 lần (để phân biệt "chưa quét" với "quét xong, rỗng").
+  final bool scanned;
   final String? error;
 
   const RouteState({
     this.points = const [],
     this.pois = const [],
     this.scanning = false,
+    this.scanned = false,
     this.error,
   });
 
@@ -45,6 +51,7 @@ class RouteState {
     List<RoutePoint>? points,
     List<Poi>? pois,
     bool? scanning,
+    bool? scanned,
     String? error,
     bool clearError = false,
   }) {
@@ -52,6 +59,7 @@ class RouteState {
       points: points ?? this.points,
       pois: pois ?? this.pois,
       scanning: scanning ?? this.scanning,
+      scanned: scanned ?? this.scanned,
       error: clearError ? null : (error ?? this.error),
     );
   }
@@ -105,11 +113,14 @@ class RouteController extends StateNotifier<RouteState> {
         radiusMeters: radiusMeters,
         types: types,
       );
-      state = state.copyWith(pois: pois, scanning: false);
-    } catch (_) {
+      state = state.copyWith(pois: pois, scanning: false, scanned: true);
+    } catch (e, st) {
+      // Lộ lỗi thật để chẩn đoán; hiển thị message thân thiện theo loại lỗi.
+      debugPrint('Quét POI lỗi: $e\n$st');
       state = state.copyWith(
         scanning: false,
-        error: 'Không quét được tiện ích. Kiểm tra kết nối mạng rồi thử lại.',
+        scanned: true,
+        error: extractUserMessage(e),
       );
     }
   }

@@ -78,7 +78,7 @@
 | OpenWeatherMap 4.0 | GET | `/data/4.0/onecall/timeline/1h` | dự báo giờ → `hourly` |
 | OpenStreetMap | GET | `tile.openstreetmap.org/{z}/{x}/{y}.png` | tile bản đồ nền (flutter_map) |
 | OpenWeatherMap tiles | GET | `tile.openweathermap.org/map/precipitation_new/...` | lớp phủ lượng mưa trên bản đồ |
-| Overpass (OSM) | POST | `overpass-api.de/api/interpreter` | quét POI (amenity/shop) quanh lộ trình |
+| Overpass (OSM) | POST | `overpass-api.de/api/interpreter` (+ mirror trong `AppConfig.overpassEndpoints`) | quét POI (amenity/shop) quanh lộ trình; thử lần lượt nhiều mirror để chịu lỗi |
 | RSS | GET | `vnexpress.net/rss/thoi-tiet.rss` | tin tức thời tiết (parse XML) |
 
 ## 5. Database Models
@@ -94,7 +94,7 @@
 
 - Backend: `backend/app/core/` (config, security, deps). _(chưa có — Phase 1 client-only)_
 - Mobile shared: `mobile/lib/shared/utils/error_handler.dart` → `extractUserMessage`; widgets `AppErrorWidget`, `LoadingWidget`, `PermissionDeniedWidget`.
-- Mobile core: `core/config/app_config.dart` (API key + ngưỡng), `core/di/providers.dart` (DI Riverpod hạ tầng), `core/network/` (Dio + connectivity), `core/error/` (failures/exceptions), `core/permissions/`, `core/notifications/`, `core/background/` (WorkManager), `core/database/` (Drift).
+- Mobile core: `core/config/app_config.dart` (API key + ngưỡng + endpoint dịch vụ ngoài: Overpass mirror, OSM/OWM tile, RSS + `User-Agent`), `core/di/providers.dart` (DI Riverpod hạ tầng), `core/network/` (Dio + connectivity), `core/error/` (failures/exceptions), `core/permissions/`, `core/notifications/`, `core/background/` (WorkManager), `core/database/` (Drift).
 
 ## 7. Quy trình làm việc & công cụ
 
