@@ -42,6 +42,18 @@ class PermissionService {
     return status.isGranted;
   }
 
+  /// Kiểm tra hiện đã có quyền thông báo chưa (cho UI Settings hiển thị).
+  Future<bool> isNotificationGranted() async {
+    return ph.Permission.notification.isGranted;
+  }
+
+  /// Xin tắt tối ưu hóa pin (whitelist) để background task chạy ổn định.
+  /// Trả true nếu đã được whitelist.
+  Future<bool> requestIgnoreBatteryOptimizations() async {
+    final status = await ph.Permission.ignoreBatteryOptimizations.request();
+    return status.isGranted;
+  }
+
   /// Mở màn hình cài đặt app (khi quyền bị từ chối vĩnh viễn).
   Future<void> openSettings() => Geolocator.openAppSettings();
 }

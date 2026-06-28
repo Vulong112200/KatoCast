@@ -21,6 +21,8 @@ dependencies:
   # --- Định vị & quyền ---
   geolocator: ^13.0.1
   permission_handler: ^11.3.1
+  # Reverse geocoding: toạ độ -> tên phường/quận/thành phố (hiển thị địa điểm).
+  geocoding: ^3.0.0
 
   # --- Thông báo & background task ---
   flutter_local_notifications: ^17.2.3
@@ -35,6 +37,20 @@ dependencies:
 
   # --- Navigation ---
   go_router: ^14.2.7
+
+  # --- Bản đồ (OpenStreetMap, miễn phí, không cần API key) ---
+  flutter_map: ^7.0.2
+  latlong2: ^0.9.1
+
+  # --- Parse RSS (tin tức thời tiết/cảnh báo) ---
+  xml: ^6.5.0
+
+  # --- Mở link tin tức ra trình duyệt ---
+  url_launcher: ^6.3.0
+
+  # --- Theme / cá nhân hóa giao diện ---
+  # Material You: lấy bảng màu động theo hình nền hệ thống (Android 12+).
+  dynamic_color: ^1.7.0
 
   # --- Models & functional error handling ---
   freezed_annotation: ^2.4.4
@@ -55,5 +71,29 @@ dev_dependencies:
   json_serializable: ^6.8.0
   drift_dev: ^2.20.3
 
+  # --- App icon & splash (sinh icon/splash từ logo) ---
+  flutter_launcher_icons: ^0.14.1
+  flutter_native_splash: ^2.4.1
+
 flutter:
   uses-material-design: true
+  assets:
+    - assets/icon/
+
+# Sinh launcher icon từ logo. Chạy: dart run flutter_launcher_icons
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/icon/app_icon.png"
+  remove_alpha_ios: true
+  min_sdk_android: 23
+  adaptive_icon_background: "#2E6FB7"
+  adaptive_icon_foreground: "assets/icon/app_icon.png"
+
+# Sinh splash screen từ logo. Chạy: dart run flutter_native_splash:create
+flutter_native_splash:
+  color: "#2E6FB7"
+  image: "assets/icon/app_icon.png"
+  android_12:
+    color: "#2E6FB7"
+    image: "assets/icon/app_icon.png"

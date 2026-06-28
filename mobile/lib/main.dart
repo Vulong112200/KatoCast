@@ -1,3 +1,4 @@
+import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
@@ -5,6 +6,11 @@ import 'package:timezone/data/latest_all.dart' as tz;
 import 'core/app_router.dart';
 import 'core/background/background_worker.dart';
 import 'core/di/providers.dart';
+import 'core/theme/app_theme.dart';
+import 'core/theme/theme_controller.dart';
+import 'core/theme/theme_palettes.dart';
+import 'core/theme/weather_theme.dart';
+import 'features/weather/presentation/providers/weather_provider.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -45,14 +51,43 @@ class _KatoCastAppState extends ConsumerState<KatoCastApp> {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp.router(
-      title: 'KatoCast',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
-        useMaterial3: true,
-      ),
-      routerConfig: appRouter,
+    final settings = ref.watch(themeControllerProvider);
+    // Tình hình thời tiết hiện tại (cho chế độ "đổi màu theo thời tiết").
+    final condition = ref.watch(weatherConditionProvider);
+
+    return DynamicColorBuilder(
+      builder: (lightDynamic, darkDynamic) {
+        // Thứ tự ưu tiên seed: thời tiết > Material You (dynamic) > bảng màu.
+        Color seed = seedForPaletteId(settings.paletteId);
+        ColorScheme? lightScheme;
+        ColorScheme? darkScheme;
+
+        if (settings.weatherAdaptive && condition != null) {
+          seed = seedForCategory(condition.category);
+        } else if (settings.useDynamicColor &&
+            lightDynamic != null &&
+            darkDynamic != null) {
+          lightScheme = lightDynamic.harmonized();
+          darkScheme = darkDynamic.harmonized();
+        }
+
+        return MaterialApp.router(
+          title: 'KatoCast',
+          debugShowCheckedModeBanner: false,
+          theme: buildAppTheme(
+            seed: seed,
+            brightness: Brightness.light,
+            dynamicScheme: lightScheme,
+          ),
+          darkTheme: buildAppTheme(
+            seed: seed,
+            brightness: Brightness.dark,
+            dynamicScheme: darkScheme,
+          ),
+          themeMode: settings.mode,
+          routerConfig: appRouter,
+        );
+      },
     );
   }
 }

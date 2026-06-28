@@ -6,7 +6,8 @@ plugins {
 
 android {
     namespace = "co.allexceed.katocast.katocast"
-    compileSdk = flutter.compileSdkVersion
+    // geocoding_android + androidx mới yêu cầu compileSdk >= 34; cố định 36.
+    compileSdk = maxOf(flutter.compileSdkVersion, 36)
     ndkVersion = flutter.ndkVersion
 
     compileOptions {

@@ -1,3 +1,4 @@
+import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
 
 import '../../../../core/config/app_config.dart';
@@ -28,4 +29,15 @@ class LocationDataSource {
   }
 
   Future<Position?> getLastKnown() => Geolocator.getLastKnownPosition();
+
+  /// Reverse geocoding: toạ độ -> địa danh. Trả null khi không có kết quả,
+  /// lỗi mạng, hoặc thiết bị không có dịch vụ geocoding (không chặn UI).
+  Future<Placemark?> reverseGeocode(double latitude, double longitude) async {
+    try {
+      final placemarks = await placemarkFromCoordinates(latitude, longitude);
+      return placemarks.isEmpty ? null : placemarks.first;
+    } catch (_) {
+      return null;
+    }
+  }
 }

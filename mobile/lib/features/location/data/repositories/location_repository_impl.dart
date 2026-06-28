@@ -4,6 +4,7 @@ import 'package:geolocator/geolocator.dart';
 import '../../../../core/error/exceptions.dart';
 import '../../../../core/error/failures.dart';
 import '../../domain/entities/coordinates.dart';
+import '../../domain/entities/place.dart';
 import '../../domain/repositories/location_repository.dart';
 import '../datasources/location_datasource.dart';
 
@@ -35,6 +36,22 @@ class LocationRepositoryImpl implements LocationRepository {
   Future<Coordinates?> getLastKnownLocation() async {
     final pos = await _dataSource.getLastKnown();
     return pos == null ? null : _toCoordinates(pos);
+  }
+
+  @override
+  Future<Place?> getPlace(Coordinates coords) async {
+    final mark = await _dataSource.reverseGeocode(
+      coords.latitude,
+      coords.longitude,
+    );
+    if (mark == null) return null;
+    return Place(
+      coordinates: coords,
+      subLocality: mark.subLocality,
+      locality: mark.locality,
+      administrativeArea: mark.administrativeArea,
+      country: mark.country,
+    );
   }
 
   Coordinates _toCoordinates(Position p) =>

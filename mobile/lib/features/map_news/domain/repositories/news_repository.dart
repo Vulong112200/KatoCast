@@ -1,9 +1,10 @@
 import '../../../location/domain/entities/coordinates.dart';
 
-/// MODULE 1 (Phase 2) — Bản đồ & Tin tức quanh vị trí.
+/// MODULE 1 — Bản đồ & Tin tức quanh vị trí.
 ///
-/// Interface đã định nghĩa sẵn để tầng UI/usecase code trước. Implementation
-/// thật (Map SDK + RSS/News API) sẽ thêm sau mà không đụng tới core thời tiết.
+/// Implementation hiện tại: [NewsRepositoryImpl] đọc RSS thời tiết (miễn phí);
+/// bản đồ dùng OpenStreetMap (flutter_map). RSS không geo-tag nên [center]/
+/// [radiusMeters] chưa lọc theo vị trí (giữ trong API để đổi nguồn sau).
 class NewsItem {
   final String title;
   final String url;

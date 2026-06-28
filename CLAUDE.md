@@ -57,12 +57,13 @@
 
 | Feature | Status | Backend | Mobile | Ghi chú |
 |---------|--------|---------|--------|---------|
-| Định vị (location) | ✅ | — | `features/location/*` (geolocator) | current + stream, distanceFilter 200m tiết kiệm pin |
+| Định vị (location) | ✅ | — | `features/location/*` (geolocator + geocoding) | current + stream, distanceFilter 200m; reverse geocoding → tên địa danh (`Place`, `currentPlaceProvider`) hiển thị trên AppBar |
+| Giao diện & cá nhân hóa (theme) | ✅ | — | `core/theme/*` + `features/settings/*` | Sáng/Tối/Hệ thống + bảng màu chọn sẵn + Material You (dynamic_color) + đổi màu theo thời tiết; lưu SharedPreferences; màn Settings (+ guide pin) |
 | Thời tiết (weather) | ✅ | — | `features/weather/*` | One Call **4.0** (3 endpoint→chuẩn hoá); offline-first cache Drift; `AnalyzeRain`, `DetectEnvChange` |
 | Phân loại tình hình (condition) | ✅ | — | `weather/domain/entities/weather_condition.dart` + `ConditionCard` | nắng/mây/mưa nhỏ-to/dông/bão lớn/lốc + nhãn + lời khuyên + mức độ |
 | Thông báo thông minh (alerts) | ✅ | — | `features/alerts/*` + `core/background` + `core/notifications` | WorkManager 15', 3 nhóm (mưa/tình hình/môi trường), cá nhân hóa, chống spam |
-| Module 1 — Map & News | 📋 | — | `features/map_news/*` (STUB) | interface sẵn, chờ Map SDK + RSS/News API |
-| Module 2 — Fixed Route POI | 🚧 | — | `features/fixed_route/*` | lưu lộ trình (Drift) ✅; `scanPoisAlongRoute` STUB (Google Places) |
+| Module 1 — Map & News | ✅ | — | `features/map_news/*` | bản đồ OSM (flutter_map) + lớp mưa OWM; tin tức RSS thời tiết (`MapScreen`, `/map`) |
+| Module 2 — Fixed Route POI | ✅ | — | `features/fixed_route/*` | lưu lộ trình (Drift) + quét POI dọc đường qua Overpass/OSM (`RouteScreen`, `/routes`) |
 
 > Status: 📋 planned · 🚧 in progress · ✅ done
 
@@ -75,6 +76,10 @@
 | OpenWeatherMap 4.0 | GET | `/data/4.0/onecall/current` | thời tiết hiện tại (`data[0]`) |
 | OpenWeatherMap 4.0 | GET | `/data/4.0/onecall/timeline/15min` | nowcast 15' → chuẩn hoá thành `minutely` |
 | OpenWeatherMap 4.0 | GET | `/data/4.0/onecall/timeline/1h` | dự báo giờ → `hourly` |
+| OpenStreetMap | GET | `tile.openstreetmap.org/{z}/{x}/{y}.png` | tile bản đồ nền (flutter_map) |
+| OpenWeatherMap tiles | GET | `tile.openweathermap.org/map/precipitation_new/...` | lớp phủ lượng mưa trên bản đồ |
+| Overpass (OSM) | POST | `overpass-api.de/api/interpreter` | quét POI (amenity/shop) quanh lộ trình |
+| RSS | GET | `vnexpress.net/rss/thoi-tiet.rss` | tin tức thời tiết (parse XML) |
 
 ## 5. Database Models
 
@@ -107,6 +112,8 @@
 - `mobile/lib/core/background/background_worker.dart` (WorkManager entry-point)
 - `mobile/lib/features/weather/domain/usecases/analyze_rain.dart` (logic mưa cốt lõi)
 - `mobile/lib/features/alerts/domain/usecases/build_weather_alerts.dart` (sinh thông báo)
+- `mobile/lib/core/theme/theme_controller.dart` (cài đặt giao diện + precedence seed)
+- `mobile/lib/features/settings/presentation/settings_screen.dart` (màn Settings + guide pin)
 
 ---
 _Cập nhật lần cuối qua `/sync-docs`. Đừng sửa tay các bảng registry nếu không chạy sync._

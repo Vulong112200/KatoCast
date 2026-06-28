@@ -34,9 +34,10 @@ mobile/
 ├── lib/
 │   ├── main.dart                 # ProviderScope, init timezone/notif/permission/background, MaterialApp.router
 │   ├── core/
-│   │   ├── app_router.dart        # GoRouter (route '/' → WeatherScreen)
+│   │   ├── app_router.dart        # GoRouter: '/' Weather · '/map' Map&News · '/routes' RouteScreen · '/settings' Settings
 │   │   ├── config/app_config.dart # API key (--dart-define) + ngưỡng mưa/pin/chu kỳ
 │   │   ├── di/providers.dart      # DI Riverpod hạ tầng (permission, network, dio, db, notif)
+│   │   ├── theme/                 # theme_palettes · weather_theme · app_theme · theme_controller (cá nhân hóa giao diện)
 │   │   ├── database/app_database.dart  # Drift DB (WeatherCache, FixedRoutePoints) [+ .g.dart]
 │   │   ├── network/
 │   │   │   ├── api_client.dart     # Dio + interceptor map lỗi → exceptions
@@ -49,16 +50,18 @@ mobile/
 │   │   └── background/background_worker.dart       # WorkManager: scheduler + callbackDispatcher
 │   ├── shared/
 │   │   ├── utils/error_handler.dart   # extractUserMessage(e)
-│   │   └── widgets/                    # AppErrorWidget, LoadingWidget, PermissionDeniedWidget
+│   │   └── widgets/                    # AppErrorWidget, LoadingWidget, PermissionDeniedWidget, AppDrawer (điều hướng)
 │   └── features/
-│       ├── location/   # domain(Coordinates, repo) · data(datasource, repo impl) · presentation(providers)
+│       ├── location/   # domain(Coordinates, Place, repo) · data(datasource geolocator+geocoding, repo impl) · presentation(providers: current/stream/place)
+│       ├── settings/   # presentation(SettingsScreen): chọn theme/bảng màu/Material You/đổi-màu-theo-thời-tiết + quyền thông báo + guide pin
 │       ├── weather/    # domain(entities, usecases AnalyzeRain/DetectEnvChange) · data(model mapper, datasources, repo) · presentation(providers, WeatherScreen, widgets)
 │       ├── alerts/     # domain(WeatherAlert, BuildWeatherAlerts) · data(AlertStateStore)
-│       ├── map_news/   # MODULE 1 (Phase 2 STUB): NewsRepository + NewsRepositoryStub
-│       └── fixed_route/# MODULE 2: RoutePoint/Poi · RouteLocalDataSource (Drift) · PoiRepositoryStub
-├── test/               # analyze_rain_test.dart · build_weather_alerts_test.dart
+│       ├── map_news/   # MODULE 1: NewsItem · RssDataSource (xml) · NewsRepositoryImpl · MapScreen (flutter_map + lớp mưa OWM + tin RSS)
+│       └── fixed_route/# MODULE 2: RoutePoint/Poi · RouteLocalDataSource (Drift) · OverpassDataSource · PoiRepositoryImpl · RouteScreen (flutter_map) · poi_visuals
+├── assets/icon/        # app_icon.png (logo) — nguồn sinh launcher icon & splash
+├── test/               # analyze_rain_test · build_weather_alerts_test · weather_condition_test
 ├── env.json.example    # mẫu API key (copy → env.json, đã .gitignore)
-└── pubspec.yaml
+└── pubspec.yaml        # + flutter_launcher_icons / flutter_native_splash config (icon/splash từ logo)
 ```
 
 ## Root project (`D:\Tools\KatoCast\`)

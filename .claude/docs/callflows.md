@@ -62,6 +62,33 @@ WeatherMapper.fromOneCallJson → WeatherData (Either<Failure, WeatherData>)
    ▼
 UI: AppErrorWidget / PermissionDeniedWidget khi lỗi; data → CurrentCard + HourlyList
    + rainStatusProvider (AnalyzeRain) → RainAlertBanner
+   + currentPlaceProvider (reverse geocoding) → tên địa danh trên AppBar
+```
+
+### 3. Chọn / áp dụng theme
+```
+SettingsScreen → themeControllerProvider.notifier.setMode/setPalette/setUseDynamicColor/setWeatherAdaptive
+   ▼ (ghi SharedPreferences, cập nhật state)
+main.dart build: watch themeControllerProvider (+ weatherConditionProvider)
+   ▼ DynamicColorBuilder
+chọn seed theo precedence: weatherAdaptive > useDynamicColor > paletteId
+   ▼ buildAppTheme(light/dark) → MaterialApp.router(theme/darkTheme/themeMode) → rebuild
+```
+
+### 4. Quét POI dọc lộ trình (Module 2)
+```
+RouteScreen → chạm bản đồ / "Thêm vị trí" → routeController.addPoint → RouteLocalDataSource (Drift)
+   ▼ chọn loại + bán kính → routeController.scan
+PoiRepositoryImpl.scanPoisAlongRoute → OverpassDataSource (POST Overpass QL around:radius)
+   ▼ parse elements → map tag→PoiType → khử trùng → Geolocator.distanceBetween (lọc bán kính, sort)
+state.pois → MarkerLayer trên flutter_map + ListView (tên · loại · khoảng cách)
+```
+
+### 5. Bản đồ & Tin tức (Module 1)
+```
+MapScreen → flutter_map (tile OSM + lớp mưa OWM) center theo currentLocationProvider
+   + newsProvider → NewsRepositoryImpl → RssDataSource (GET RSS → xml parse → NewsItem[])
+   ▼ ListView tin; tap → url_launcher mở trình duyệt
 ```
 
 ### 2. Thông báo thông minh (background — WorkManager)

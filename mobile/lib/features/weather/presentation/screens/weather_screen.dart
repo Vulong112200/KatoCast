@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/background/background_worker.dart';
 import '../../../../core/di/providers.dart';
 import '../../../../core/error/failures.dart';
+import '../../../../shared/widgets/app_drawer.dart';
 import '../../../../shared/widgets/app_error_widget.dart';
 import '../../../../shared/widgets/loading_widget.dart';
 import '../../../../shared/widgets/permission_denied_widget.dart';
@@ -23,9 +24,36 @@ class WeatherScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final weatherAsync = ref.watch(weatherProvider);
 
+    final placeAsync = ref.watch(currentPlaceProvider);
+
     return Scaffold(
+      drawer: const AppDrawer(),
       appBar: AppBar(
-        title: const Text('KatoCast'),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('KatoCast'),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.place_outlined, size: 14),
+                const SizedBox(width: 4),
+                Flexible(
+                  child: Text(
+                    placeAsync.maybeWhen(
+                      data: (place) =>
+                          place?.shortLabel ?? 'Không xác định vị trí',
+                      orElse: () => 'Đang xác định vị trí…',
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
         actions: [
           IconButton(
             tooltip: 'Làm mới',
@@ -70,8 +98,9 @@ class WeatherScreen extends ConsumerWidget {
   }
 
   void _refresh(WidgetRef ref) {
-    // Invalidate cả vị trí (để thử lại quyền) lẫn thời tiết.
+    // Invalidate cả vị trí (để thử lại quyền), địa danh, lẫn thời tiết.
     ref.invalidate(currentLocationProvider);
+    ref.invalidate(currentPlaceProvider);
     ref.invalidate(weatherProvider);
   }
 

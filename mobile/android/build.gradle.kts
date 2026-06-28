@@ -19,6 +19,21 @@ subprojects {
     project.evaluationDependsOn(":app")
 }
 
+// Ép mọi plugin Android (vd: geocoding_android) biên dịch với compileSdk = 36.
+// Cần thiết vì flutter.compileSdkVersion của SDK hiện tại = 33, trong khi
+// androidx mới (fragment 1.7.1, core 1.13.1...) yêu cầu compileSdk >= 34.
+subprojects {
+    afterEvaluate {
+        plugins.withId("com.android.library") {
+            extensions.configure<com.android.build.gradle.LibraryExtension> {
+                if (compileSdk == null || compileSdk!! < 36) {
+                    compileSdk = 36
+                }
+            }
+        }
+    }
+}
+
 tasks.register<Delete>("clean") {
     delete(rootProject.layout.buildDirectory)
 }
