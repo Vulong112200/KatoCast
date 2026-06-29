@@ -55,7 +55,7 @@ mobile/
 │       ├── location/   # domain(Coordinates, Place, repo) · data(datasource geolocator+geocoding, repo impl) · presentation(providers: current/stream/place)
 │       ├── settings/   # presentation(SettingsScreen): chọn theme/bảng màu/Material You/đổi-màu-theo-thời-tiết + quyền thông báo + guide pin
 │       ├── weather/    # domain(entities, usecases AnalyzeRain/DetectEnvChange) · data(model mapper, datasources, repo) · presentation(providers, WeatherScreen, widgets)
-│       ├── alerts/     # domain(WeatherAlert, BuildWeatherAlerts) · data(AlertStateStore)
+│       ├── alerts/     # domain(WeatherAlert, BuildWeatherAlerts, BuildDailyDigest) · data(AlertStateStore, NotificationPrefsStore) · presentation(notificationSettingsProvider)
 │       ├── map_news/   # MODULE 1: NewsItem · RssDataSource (xml) · NewsRepositoryImpl · MapScreen (flutter_map + lớp mưa OWM + tin RSS)
 │       └── fixed_route/# MODULE 2: RoutePoint/Poi · RouteLocalDataSource (Drift) · OverpassDataSource · PoiRepositoryImpl · RouteScreen (flutter_map) · poi_visuals
 ├── assets/icon/        # app_icon.png (logo) — nguồn sinh launcher icon & splash

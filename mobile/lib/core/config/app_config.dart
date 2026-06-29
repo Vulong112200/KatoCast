@@ -59,6 +59,21 @@ class AppConfig {
   /// background → bỏ qua lần check để tránh cảnh báo nhầm khu vực.
   static const int backgroundLastKnownMaxAgeHours = 3;
 
+  // --- Bản tin thời tiết hằng ngày ---
+
+  /// Mốc giờ bản tin buổi sáng mặc định (phút-trong-ngày). 390 = 6:30.
+  static const int digestDefaultMorningMinutes = 6 * 60 + 30;
+
+  /// Mốc giờ bản tin buổi chiều mặc định (phút-trong-ngày). 990 = 16:30.
+  static const int digestDefaultEveningMinutes = 16 * 60 + 30;
+
+  /// Độ rộng "cửa sổ" (phút) sau mốc giờ mà bản tin còn được phép bắn — dung
+  /// sai cho lịch WorkManager ~15 phút (có thể trễ do Doze).
+  static const int digestWindowMinutes = 30;
+
+  /// Ngưỡng chỉ số UV để nhắc chống nắng trong bản tin.
+  static const double digestUvWarnThreshold = 6.0;
+
   // --- Định danh & endpoint dịch vụ ngoài ---
 
   /// User-Agent định danh app (chính sách OSM/Overpass yêu cầu UA rõ ràng;

@@ -101,6 +101,11 @@ AnalyzeRain + DetectEnvChange → BuildWeatherAlerts(rain, env, previousPhase t�
    │ chỉ sinh alert khi PHA đổi (chống spam)
    ▼
 NotificationService.show(id cố định theo loại) → AlertStateStore.write(phase mới)
+   ▼ (cùng lần chạy, kênh độc lập)
+_maybeSendDailyDigest: NotificationPrefsStore.read()
+   │ nếu enabled & nowMinutes ∈ [mốc, mốc+digestWindowMinutes) & lastSentDay≠hôm nay
+   ▼
+BuildDailyDigest(data) → NotificationService.show(dailyDigest) → markSent(slot, yyyymmdd)
 ```
 
 ### Error mapping (đã áp dụng)

@@ -62,6 +62,7 @@
 | Thời tiết (weather) | ✅ | — | `features/weather/*` | One Call **4.0** (3 endpoint→chuẩn hoá); offline-first cache Drift; `AnalyzeRain`, `DetectEnvChange` |
 | Phân loại tình hình (condition) | ✅ | — | `weather/domain/entities/weather_condition.dart` + `ConditionCard` | nắng/mây/mưa nhỏ-to/dông/bão lớn/lốc + nhãn + lời khuyên + mức độ |
 | Thông báo thông minh (alerts) | ✅ | — | `features/alerts/*` + `core/background` + `core/notifications` | WorkManager 15', 3 nhóm (mưa/tình hình/môi trường), cá nhân hóa, chống spam |
+| Bản tin thời tiết hằng ngày (digest) | ✅ | — | `features/alerts/*` (BuildDailyDigest, NotificationPrefsStore, notificationSettingsProvider) + `core/background` | Tự gửi tóm tắt nhiệt độ + tình hình + lưu ý vào khung giờ cố định (mặc định 6h30 & 16h30, chỉnh trong Settings); piggyback trên worker 15', chống gửi lặp theo ngày |
 | Module 1 — Map & News | ✅ | — | `features/map_news/*` | bản đồ OSM (flutter_map) + lớp mưa OWM; tin tức RSS thời tiết (`MapScreen`, `/map`) |
 | Module 2 — Fixed Route POI | ✅ | — | `features/fixed_route/*` | lưu lộ trình (Drift) + quét POI dọc đường qua Overpass/OSM (`RouteScreen`, `/routes`) |
 
@@ -111,7 +112,9 @@
 - `mobile/lib/core/config/app_config.dart` (API key + ngưỡng tinh chỉnh)
 - `mobile/lib/core/background/background_worker.dart` (WorkManager entry-point)
 - `mobile/lib/features/weather/domain/usecases/analyze_rain.dart` (logic mưa cốt lõi)
-- `mobile/lib/features/alerts/domain/usecases/build_weather_alerts.dart` (sinh thông báo)
+- `mobile/lib/features/alerts/domain/usecases/build_weather_alerts.dart` (sinh thông báo sự kiện)
+- `mobile/lib/features/alerts/domain/usecases/build_daily_digest.dart` (sinh bản tin hằng ngày)
+- `mobile/lib/features/alerts/data/notification_prefs_store.dart` (cài đặt bản tin + chống gửi lặp)
 - `mobile/lib/core/theme/theme_controller.dart` (cài đặt giao diện + precedence seed)
 - `mobile/lib/features/settings/presentation/settings_screen.dart` (màn Settings + guide pin)
 

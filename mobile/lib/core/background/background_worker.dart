@@ -3,11 +3,14 @@ import 'package:geolocator/geolocator.dart';
 import 'package:workmanager/workmanager.dart';
 
 import '../../features/alerts/data/alert_state_store.dart';
+import '../../features/alerts/data/notification_prefs_store.dart';
+import '../../features/alerts/domain/usecases/build_daily_digest.dart';
 import '../../features/alerts/domain/usecases/build_weather_alerts.dart';
 import '../../features/location/domain/entities/coordinates.dart';
 import '../../features/weather/data/datasources/weather_local_datasource.dart';
 import '../../features/weather/data/datasources/weather_remote_datasource.dart';
 import '../../features/weather/data/repositories/weather_repository_impl.dart';
+import '../../features/weather/domain/entities/weather.dart';
 import '../../features/weather/domain/entities/weather_condition.dart';
 import '../../features/weather/domain/usecases/analyze_rain.dart';
 import '../../features/weather/domain/usecases/detect_env_change.dart';
@@ -106,9 +109,9 @@ Future<void> _runWeatherCheck() async {
       envAlreadyNotified: prev.envNotified,
     );
 
-    // 4. Gửi notification.
+    // 4. Gửi notification cảnh báo sự kiện.
+    final notif = NotificationService();
     if (out.alerts.isNotEmpty) {
-      final notif = NotificationService();
       await notif.init();
       for (final a in out.alerts) {
         await notif.show(id: a.id, title: a.title, body: a.body);
@@ -121,7 +124,45 @@ Future<void> _runWeatherCheck() async {
       category: out.newCategory,
       envNotified: out.envNotified,
     );
+
+    // 6. Bản tin hằng ngày: nếu đang trong cửa sổ một mốc giờ và hôm nay chưa
+    // gửi mốc đó → bắn 1 bản tin tóm tắt (độc lập với cảnh báo sự kiện).
+    await _maybeSendDailyDigest(data, notif);
   } finally {
     await db.close();
+  }
+}
+
+/// Bắn bản tin hằng ngày nếu đang trong cửa sổ của một mốc giờ (sáng/chiều) và
+/// mốc đó hôm nay chưa được gửi. Dùng "đã gửi hôm nay" để chống lặp qua nhiều
+/// lần chạy 15' trong cùng cửa sổ.
+Future<void> _maybeSendDailyDigest(
+  WeatherData data,
+  NotificationService notif,
+) async {
+  final prefs = NotificationPrefsStore();
+  final dp = await prefs.read();
+  if (!dp.enabled) return;
+
+  final now = DateTime.now();
+  final nowMinutes = now.hour * 60 + now.minute;
+  final today = now.year * 10000 + now.month * 100 + now.day;
+
+  DailyDigest? digest;
+  for (final slot in DigestSlot.values) {
+    final start = dp.minutesOf(slot);
+    final inWindow = nowMinutes >= start &&
+        nowMinutes < start + AppConfig.digestWindowMinutes;
+    if (!inWindow) continue;
+    if (await prefs.lastSentDay(slot) == today) continue;
+
+    digest ??= const BuildDailyDigest().call(data);
+    await notif.init();
+    await notif.show(
+      id: NotificationIds.dailyDigest,
+      title: digest.title,
+      body: digest.body,
+    );
+    await prefs.markSent(slot, today);
   }
 }

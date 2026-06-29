@@ -48,6 +48,12 @@
 - **Mobile:** `WeatherAlert` · `BuildWeatherAlerts` (usecase) · `AlertStateStore` (SharedPreferences) · `NotificationService` (core/notifications) · `BackgroundScheduler` + `callbackDispatcher` (core/background, WorkManager)
 - **Key logic:** WorkManager periodic 15' chạy trong **isolate riêng** (tự dựng DI, không Riverpod). Sinh **3 nhóm** thông báo: (1) thời điểm mưa (RainStatus), (2) tình hình thời tiết (WeatherCondition), (3) thay đổi nhiệt/ẩm (EnvChange). Chống spam: chỉ phát khi PHA mưa / NHÓM thời tiết đổi so với trạng thái lưu ở `AlertStateStore` (phase + category + envNotified); notification ID cố định theo loại để thay thế thay vì chồng chất.
 
+### Bản tin thời tiết hằng ngày (daily digest)
+- **Status:** ✅ done
+- **Backend:** —
+- **Mobile:** `DailyDigest` + `BuildDailyDigest` (usecase) · `NotificationPrefsStore` + `DigestPrefs`/`DigestSlot` (SharedPreferences) · `NotificationSettingsController` + provider `notificationSettingsProvider` · UI `_DailyDigestSettings` trong `SettingsScreen` · gửi qua `NotificationService` (ID `dailyDigest=1005`) · trigger trong `_runWeatherCheck` (`background_worker.dart`)
+- **Key logic:** kênh thông báo **độc lập** với cảnh báo sự kiện — luôn gửi tóm tắt (nhiệt độ + cảm giác như + hi/lo 24h + tình hình `WeatherCondition` + lời khuyên + gợi ý mưa từ `AnalyzeRain` + nhắc UV nếu `uvi≥digestUvWarnThreshold`). **Piggyback** trên worker 15': mỗi lần chạy kiểm tra đồng hồ, nếu `nowMinutes` nằm trong `[mốc, mốc+digestWindowMinutes)` (mặc định cửa sổ 30') và mốc đó **hôm nay chưa gửi** (`lastSentDay != yyyymmdd`) → bắn rồi `markSent`. Hai mốc `morningMinutes`/`eveningMinutes` (mặc định 390/990 = 6h30/16h30) lưu phút-trong-ngày, chỉnh qua time picker trong Settings; có công tắc `enabled` + nút "Gửi thử bản tin ngay" (đọc `weatherProvider`). Bắn trong ~0–15' sau mốc (lịch WorkManager không exact, không cần quyền exact-alarm).
+
 ### Module 1 — Bản đồ & Tin tức
 - **Status:** ✅ done
 - **Backend:** — (OpenStreetMap + RSS, miễn phí, không key)
@@ -81,6 +87,7 @@
 | `locationStreamProvider` | StreamProvider | location | `locationRepositoryProvider` |
 | `currentPlaceProvider` | FutureProvider | location | `currentLocationProvider` + `locationRepositoryProvider` |
 | `themeControllerProvider` | StateNotifierProvider | theme | SharedPreferences; UI Settings + `main.dart` |
+| `notificationSettingsProvider` | StateNotifierProvider | alerts (digest) | `NotificationPrefsStore` (SharedPreferences); UI Settings |
 | `routeControllerProvider` | StateNotifierProvider | fixed_route | `poiRepositoryProvider` (Drift + Overpass) |
 | `poiRepositoryProvider` | Provider (DI) | fixed_route | `routeLocalDataSourceProvider` + `overpassDataSourceProvider` |
 | `newsProvider` | FutureProvider | map_news | `currentLocationProvider` + `newsRepositoryProvider` (RSS) |

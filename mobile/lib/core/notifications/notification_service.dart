@@ -69,4 +69,8 @@ class NotificationIds {
   static const int rainStop = 1002;
   static const int envChange = 1003;
   static const int condition = 1004;
+
+  /// Bản tin thời tiết hằng ngày (sáng/chiều) — dùng chung 1 ID vì mỗi thời
+  /// điểm chỉ hiển thị một bản tin.
+  static const int dailyDigest = 1005;
 }
