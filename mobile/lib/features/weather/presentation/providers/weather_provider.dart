@@ -1,3 +1,4 @@
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/di/providers.dart';
@@ -29,16 +30,48 @@ final weatherRepositoryProvider = Provider<WeatherRepository>(
   ),
 );
 
-/// Thời tiết tại vị trí hiện tại.
+/// Thời tiết tại vị trí hiện tại — **stale-while-revalidate**.
 ///
-/// Chuỗi phụ thuộc: currentLocation → weatherRepository.getWeather.
-/// `ref.invalidate(weatherProvider)` để refresh; nếu vị trí lỗi/quyền bị từ
-/// chối, lỗi nổi lên qua AsyncError để UI hiển thị đúng widget.
-final weatherProvider = FutureProvider<WeatherData>((ref) async {
+/// Mở app: phát ngay cache hiện có (UI hiển thị tức thì, không kẹt "Đang lấy
+/// dữ liệu"), rồi mới gọi API làm mới NẾU cache thiếu hoặc đã quá ngưỡng
+/// (`needsRevalidate`, 15' — khớp chu kỳ nền). Cache còn tươi → bỏ qua gọi API
+/// (tiết kiệm quota). Fetch lỗi mà đã có cache → giữ cache, không báo lỗi.
+///
+/// `ref.invalidate(weatherProvider)` để refresh; lỗi vị trí/quyền nổi lên qua
+/// AsyncError để UI hiển thị đúng widget.
+final weatherProvider = StreamProvider<WeatherData>((ref) async* {
   final Coordinates coords = await ref.watch(currentLocationProvider.future);
   final repo = ref.watch(weatherRepositoryProvider);
-  final result = await repo.getWeather(coords);
-  return result.fold((failure) => throw failure, (data) => data);
+
+  // 1. Cache trước (nếu có) → vẽ ngay.
+  final cached = await repo.getCachedWeather(coords);
+  if (cached != null) yield cached;
+
+  // 2. Làm mới khi thiếu cache hoặc cache đã quá ngưỡng.
+  if (cached == null || cached.needsRevalidate) {
+    final result = await repo.getWeather(coords);
+    yield* result.fold(
+      (failure) async* {
+        // Không có gì để hiện → báo lỗi; còn cache thì giữ nguyên (im lặng).
+        if (cached == null) throw failure;
+      },
+      (data) async* {
+        yield data;
+      },
+    );
+  }
+});
+
+/// Trạng thái online/offline theo thời gian thực (connectivity_plus). Dùng để
+/// badge "dữ liệu cũ" nói đúng: thật sự offline vs đang làm mới. Lưu ý
+/// connectivity_plus chỉ phản ánh interface mạng, không kiểm tra reachability —
+/// đủ để phân biệt "tắt mạng" với "có mạng".
+final connectivityStatusProvider = StreamProvider<bool>((ref) async* {
+  final conn = ref.watch(connectivityProvider);
+  bool online(List<ConnectivityResult> r) =>
+      r.any((e) => e != ConnectivityResult.none);
+  yield online(await conn.checkConnectivity());
+  yield* conn.onConnectivityChanged.map(online);
 });
 
 /// Trạng thái mưa suy ra từ dữ liệu thời tiết — dùng cho banner cảnh báo trong UI.

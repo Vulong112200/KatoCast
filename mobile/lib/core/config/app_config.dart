@@ -37,6 +37,10 @@ class AppConfig {
   /// Số phút khô liên tiếp cần xác nhận để coi là "đã tạnh" (chống nhiễu 1 phút).
   static const int dryStreakToConfirmStop = 3;
 
+  /// Tầm nhìn (phút) coi là "sắp mưa". Onset xa hơn ngưỡng này (chỉ xảy ra ở
+  /// fallback hourly) không báo "sắp mưa" để tránh cảnh báo quá sớm/không sát.
+  static const int rainSoonHorizonMinutes = 120;
+
   /// Khoảng cách (mét) di chuyển tối thiểu để cập nhật lại vị trí (tối ưu pin).
   static const int locationDistanceFilterMeters = 200;
 
@@ -49,8 +53,14 @@ class AppConfig {
   /// Ngưỡng thay đổi độ ẩm mạnh (%).
   static const double strongHumidityDeltaPct = 20.0;
 
-  /// Thời gian cache thời tiết còn coi là "tươi" (phút).
+  /// Thời gian cache thời tiết còn coi là "tươi" (phút) — dùng cho badge "dữ
+  /// liệu cũ" trên UI.
   static const int cacheFreshnessMinutes = 30;
+
+  /// Ngưỡng tuổi cache để mở app TỰ gọi API làm mới (phút). Khớp chu kỳ nền
+  /// 15' → mở app khi cache còn trong ngưỡng này sẽ hiển thị ngay, không tốn
+  /// thêm lượt gọi API.
+  static const int weatherRevalidateMinutes = 15;
 
   /// Cache thời tiết cũ hơn ngưỡng này (ngày) sẽ bị dọn để DB không phình.
   static const int cacheMaxAgeDays = 7;
@@ -66,10 +76,6 @@ class AppConfig {
 
   /// Mốc giờ bản tin buổi chiều mặc định (phút-trong-ngày). 990 = 16:30.
   static const int digestDefaultEveningMinutes = 16 * 60 + 30;
-
-  /// Độ rộng "cửa sổ" (phút) sau mốc giờ mà bản tin còn được phép bắn — dung
-  /// sai cho lịch WorkManager ~15 phút (có thể trễ do Doze).
-  static const int digestWindowMinutes = 30;
 
   /// Ngưỡng chỉ số UV để nhắc chống nắng trong bản tin.
   static const double digestUvWarnThreshold = 6.0;

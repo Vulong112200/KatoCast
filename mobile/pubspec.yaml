@@ -28,6 +28,8 @@ dependencies:
   flutter_local_notifications: ^17.2.3
   workmanager: ^0.9.0+3
   timezone: ^0.9.4
+  # Lấy tên múi giờ thiết bị để set tz.local (zonedSchedule bắn đúng giờ địa phương).
+  flutter_timezone: ^3.0.1
 
   # --- Local DB (Data Layer / local datasource - cache + fixed route) ---
   drift: ^2.20.3

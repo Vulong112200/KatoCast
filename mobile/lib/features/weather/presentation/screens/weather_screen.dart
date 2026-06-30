@@ -76,9 +76,14 @@ class WeatherScreen extends ConsumerWidget {
           data: (data) {
             final rain = ref.watch(rainStatusProvider);
             final condition = ref.watch(weatherConditionProvider);
+            final offline = ref.watch(connectivityStatusProvider).maybeWhen(
+                  data: (online) => !online,
+                  orElse: () => false,
+                );
             return ListView(
               children: [
-                if (data.isStale) _staleBadge(context, data.fetchedAt),
+                if (data.isStale)
+                  _staleBadge(context, data.fetchedAt, offline),
                 if (rain != null) RainAlertBanner(status: rain),
                 if (condition != null) ConditionCard(condition: condition),
                 CurrentWeatherCard(current: data.current),
@@ -131,15 +136,19 @@ class WeatherScreen extends ConsumerWidget {
     );
   }
 
-  Widget _staleBadge(BuildContext context, DateTime fetchedAt) {
+  Widget _staleBadge(BuildContext context, DateTime fetchedAt, bool offline) {
     final time =
         '${fetchedAt.hour.toString().padLeft(2, '0')}:${fetchedAt.minute.toString().padLeft(2, '0')}';
+    // Offline thật → nói rõ offline; còn online mà dữ liệu cũ → đang làm mới.
+    final msg = offline
+        ? 'Đang offline — hiển thị dữ liệu lúc $time'
+        : 'Dữ liệu lúc $time · đang làm mới…';
     return Container(
       width: double.infinity,
       color: Colors.orange.withValues(alpha: 0.15),
       padding: const EdgeInsets.all(8),
       child: Text(
-        'Đang offline — hiển thị dữ liệu lúc $time',
+        msg,
         textAlign: TextAlign.center,
         style: Theme.of(context).textTheme.bodySmall,
       ),

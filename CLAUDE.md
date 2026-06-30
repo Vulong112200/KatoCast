@@ -59,10 +59,10 @@
 |---------|--------|---------|--------|---------|
 | Định vị (location) | ✅ | — | `features/location/*` (geolocator + geocoding) | current + stream, distanceFilter 200m; reverse geocoding → tên địa danh (`Place`, `currentPlaceProvider`) hiển thị trên AppBar |
 | Giao diện & cá nhân hóa (theme) | ✅ | — | `core/theme/*` + `features/settings/*` | Sáng/Tối/Hệ thống + bảng màu chọn sẵn + Material You (dynamic_color) + đổi màu theo thời tiết; lưu SharedPreferences; màn Settings (+ guide pin) |
-| Thời tiết (weather) | ✅ | — | `features/weather/*` | One Call **4.0** (3 endpoint→chuẩn hoá); offline-first cache Drift; `AnalyzeRain`, `DetectEnvChange` |
+| Thời tiết (weather) | ✅ | — | `features/weather/*` | One Call **4.0** (3 endpoint→chuẩn hoá); offline-first cache Drift; **stale-while-revalidate** (mở app hiện cache ngay, chỉ gọi API khi cache ≥15'); `AnalyzeRain` (kèm `probabilityPct`), `DetectEnvChange`; `connectivityStatusProvider` cho badge offline |
 | Phân loại tình hình (condition) | ✅ | — | `weather/domain/entities/weather_condition.dart` + `ConditionCard` | nắng/mây/mưa nhỏ-to/dông/bão lớn/lốc + nhãn + lời khuyên + mức độ |
-| Thông báo thông minh (alerts) | ✅ | — | `features/alerts/*` + `core/background` + `core/notifications` | WorkManager 15', 3 nhóm (mưa/tình hình/môi trường), cá nhân hóa, chống spam |
-| Bản tin thời tiết hằng ngày (digest) | ✅ | — | `features/alerts/*` (BuildDailyDigest, NotificationPrefsStore, notificationSettingsProvider) + `core/background` | Tự gửi tóm tắt nhiệt độ + tình hình + lưu ý vào khung giờ cố định (mặc định 6h30 & 16h30, chỉnh trong Settings); piggyback trên worker 15', chống gửi lặp theo ngày |
+| Thông báo thông minh (alerts) | ✅ | — | `features/alerts/*` + `core/background` + `core/notifications` | WorkManager 15', 3 nhóm (mưa/tình hình/môi trường), cá nhân hóa, chống spam; nội dung mưa kèm **giờ cụ thể (HH:MM) + % khả năng mưa**; `BigTextStyleInformation` chống cắt chữ |
+| Bản tin thời tiết hằng ngày (digest) | ✅ | — | `features/alerts/*` (BuildDailyDigest, NotificationPrefsStore, notificationSettingsProvider, **digest_scheduler**) + `core/notifications` | Tự gửi tóm tắt vào khung giờ cố định (mặc định 6h30 & 16h30); dùng **alarm hệ thống `zonedSchedule`** (lặp ngày, `inexactAllowWhileIdle`) thay vì piggyback worker → bắn đúng giờ kể cả khi app bị tắt; nội dung lập lịch lại khi mở app / worker chạy / đổi cài đặt |
 | Module 1 — Map & News | ✅ | — | `features/map_news/*` | bản đồ OSM (flutter_map) + lớp mưa OWM; tin tức RSS thời tiết (`MapScreen`, `/map`) |
 | Module 2 — Fixed Route POI | ✅ | — | `features/fixed_route/*` | lưu lộ trình (Drift) + quét POI dọc đường qua Overpass/OSM (`RouteScreen`, `/routes`) |
 
@@ -114,7 +114,9 @@
 - `mobile/lib/features/weather/domain/usecases/analyze_rain.dart` (logic mưa cốt lõi)
 - `mobile/lib/features/alerts/domain/usecases/build_weather_alerts.dart` (sinh thông báo sự kiện)
 - `mobile/lib/features/alerts/domain/usecases/build_daily_digest.dart` (sinh bản tin hằng ngày)
-- `mobile/lib/features/alerts/data/notification_prefs_store.dart` (cài đặt bản tin + chống gửi lặp)
+- `mobile/lib/features/alerts/data/digest_scheduler.dart` (lập lịch bản tin qua alarm hệ thống)
+- `mobile/lib/features/alerts/data/notification_prefs_store.dart` (cài đặt bản tin)
+- `mobile/lib/core/notifications/notification_service.dart` (show + scheduleDaily/cancel, BigText)
 - `mobile/lib/core/theme/theme_controller.dart` (cài đặt giao diện + precedence seed)
 - `mobile/lib/features/settings/presentation/settings_screen.dart` (màn Settings + guide pin)
 

@@ -337,7 +337,7 @@ class _DailyDigestSettings extends ConsumerWidget {
       final digest = const BuildDailyDigest().call(data);
       final notif = NotificationService();
       await notif.show(
-        id: NotificationIds.dailyDigest,
+        id: NotificationIds.dailyDigestMorning,
         title: digest.title,
         body: digest.body,
       );

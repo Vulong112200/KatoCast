@@ -53,8 +53,6 @@ class NotificationPrefsStore {
   static const _kEnabled = 'digest_enabled';
   static const _kMorning = 'digest_morning_min';
   static const _kEvening = 'digest_evening_min';
-  static const _kSentMorning = 'digest_sent_morning';
-  static const _kSentEvening = 'digest_sent_evening';
 
   Future<DigestPrefs> read() async {
     final prefs = await SharedPreferences.getInstance();
@@ -81,19 +79,4 @@ class NotificationPrefsStore {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_kEvening, minutes);
   }
-
-  /// Mã ngày (yyyymmdd) bản tin của [slot] đã được gửi gần nhất; null nếu chưa.
-  Future<int?> lastSentDay(DigestSlot slot) async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getInt(_keyForSent(slot));
-  }
-
-  /// Ghi nhận đã gửi bản tin [slot] cho ngày [yyyymmdd] (chống gửi lặp).
-  Future<void> markSent(DigestSlot slot, int yyyymmdd) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_keyForSent(slot), yyyymmdd);
-  }
-
-  static String _keyForSent(DigestSlot slot) =>
-      slot == DigestSlot.morning ? _kSentMorning : _kSentEvening;
 }

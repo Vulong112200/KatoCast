@@ -59,25 +59,38 @@ class BuildDailyDigest {
       parts.add('Chỉ số UV cao (${c.uvi.round()}) — nhớ chống nắng khi ra ngoài.');
     }
 
+    // Mốc thời gian dữ liệu được lấy — cho người dùng biết độ tươi của bản tin.
+    parts.add('Cập nhật lúc ${_clock(data.fetchedAt)}.');
+
     return DailyDigest(title: title, body: parts.join(' '));
   }
 
   String? _rainHint(RainStatus rain) {
+    final pct = rain.probabilityPct;
+    final chance = pct != null ? ' (khả năng ~$pct%)' : '';
     switch (rain.phase) {
       case RainPhase.rainStartingSoon:
         final n = rain.minutesUntilChange;
         return n != null
-            ? 'Dự kiến có mưa trong khoảng $n phút tới.'
-            : 'Sắp có mưa.';
+            ? 'Dự kiến mưa lúc ${_clockAfter(n)} (khoảng $n phút tới)$chance.'
+            : 'Sắp có mưa$chance.';
       case RainPhase.raining:
-        return 'Hiện đang có mưa.';
+        return 'Hiện đang có mưa$chance.';
       case RainPhase.rainStoppingSoon:
         final n = rain.minutesUntilChange;
         return n != null
-            ? 'Mưa dự kiến tạnh trong khoảng $n phút tới.'
+            ? 'Mưa dự kiến tạnh lúc ${_clockAfter(n)} (khoảng $n phút tới).'
             : 'Mưa sắp tạnh.';
       case RainPhase.dry:
         return null;
     }
   }
+
+  /// HH:MM của một thời điểm.
+  String _clock(DateTime t) =>
+      '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+
+  /// HH:MM sau [minutes] phút kể từ bây giờ.
+  String _clockAfter(int minutes) =>
+      _clock(DateTime.now().add(Duration(minutes: minutes)));
 }

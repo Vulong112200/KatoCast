@@ -16,10 +16,27 @@ class AnalyzeRain {
   static const int _dryStreak = AppConfig.dryStreakToConfirmStop;
 
   RainStatus call(WeatherData data) {
-    if (data.minutely.isNotEmpty) {
-      return _fromMinutely(data.minutely);
-    }
-    return _fromHourly(data.hourly);
+    final base = data.minutely.isNotEmpty
+        ? _fromMinutely(data.minutely)
+        : _fromHourly(data.hourly);
+    // Bổ sung xác suất mưa (%) từ hourly.pop quanh thời điểm liên quan.
+    final pct = _probabilityPct(data.hourly, base.minutesUntilChange);
+    if (pct == null) return base;
+    return RainStatus(
+      phase: base.phase,
+      minutesUntilChange: base.minutesUntilChange,
+      fromMinutely: base.fromMinutely,
+      probabilityPct: pct,
+    );
+  }
+
+  /// Xác suất mưa (%) suy từ `hourly.pop` tại giờ gần thời điểm chuyển trạng
+  /// thái nhất (mặc định giờ hiện tại). null nếu không có dữ liệu giờ.
+  int? _probabilityPct(List<HourlyForecast> hourly, int? minutesUntilChange) {
+    if (hourly.isEmpty) return null;
+    final idx =
+        ((minutesUntilChange ?? 0) ~/ 60).clamp(0, hourly.length - 1);
+    return (hourly[idx].pop * 100).round();
   }
 
   // --- Phân tích theo chuỗi dự báo ngắn hạn ---
@@ -88,6 +105,10 @@ class AnalyzeRain {
     if (!rainingNow) {
       for (var i = 0; i < hourly.length; i++) {
         if (isWet(hourly[i])) {
+          // Onset quá xa → chưa coi là "sắp mưa" (tránh báo quá sớm).
+          if (i * 60 > AppConfig.rainSoonHorizonMinutes) {
+            return const RainStatus.dry(fromMinutely: false);
+          }
           return RainStatus(
             phase: RainPhase.rainStartingSoon,
             minutesUntilChange: i * 60,

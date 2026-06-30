@@ -1,4 +1,5 @@
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:timezone/timezone.dart' as tz;
 
 /// Wrapper quanh flutter_local_notifications.
 ///
@@ -48,17 +49,67 @@ class NotificationService {
     required String body,
   }) async {
     await init();
-    const details = NotificationDetails(
+    await _plugin.show(id, title, body, _details(title, body));
+  }
+
+  /// Lập lịch bản tin lặp HẰNG NGÀY vào [hour]:[minute] (giờ địa phương).
+  ///
+  /// Dùng alarm hệ thống (đáng tin hơn WorkManager cho mốc giờ cố định):
+  /// `inexactAllowWhileIdle` bắn được cả trong Doze và KHÔNG cần quyền
+  /// SCHEDULE_EXACT_ALARM. [matchDateTimeComponents]=time để lặp mỗi ngày.
+  Future<void> scheduleDaily({
+    required int id,
+    required int hour,
+    required int minute,
+    required String title,
+    required String body,
+  }) async {
+    await init();
+    await _plugin.zonedSchedule(
+      id,
+      title,
+      body,
+      _nextInstanceOf(hour, minute),
+      _details(title, body),
+      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+      uiLocalNotificationDateInterpretation:
+          UILocalNotificationDateInterpretation.absoluteTime,
+      matchDateTimeComponents: DateTimeComponents.time,
+    );
+  }
+
+  /// Huỷ một thông báo / lịch theo [id].
+  Future<void> cancel(int id) async {
+    await init();
+    await _plugin.cancel(id);
+  }
+
+  /// Cấu hình hiển thị dùng chung — BigTextStyle để body dài KHÔNG bị cắt
+  /// (mở rộng hiển thị đầy đủ % mưa, giờ mưa, lời khuyên…).
+  NotificationDetails _details(String title, String body) {
+    return NotificationDetails(
       android: AndroidNotificationDetails(
         _channelId,
         _channelName,
         channelDescription: _channelDesc,
         importance: Importance.high,
         priority: Priority.high,
+        styleInformation: BigTextStyleInformation(body, contentTitle: title),
       ),
-      iOS: DarwinNotificationDetails(),
+      iOS: const DarwinNotificationDetails(),
     );
-    await _plugin.show(id, title, body, details);
+  }
+
+  /// Mốc kế tiếp của [hour]:[minute] trong múi giờ địa phương. Nếu hôm nay đã
+  /// qua thì lùi sang ngày mai.
+  tz.TZDateTime _nextInstanceOf(int hour, int minute) {
+    final now = tz.TZDateTime.now(tz.local);
+    var scheduled =
+        tz.TZDateTime(tz.local, now.year, now.month, now.day, hour, minute);
+    if (!scheduled.isAfter(now)) {
+      scheduled = scheduled.add(const Duration(days: 1));
+    }
+    return scheduled;
   }
 }
 
@@ -70,7 +121,8 @@ class NotificationIds {
   static const int envChange = 1003;
   static const int condition = 1004;
 
-  /// Bản tin thời tiết hằng ngày (sáng/chiều) — dùng chung 1 ID vì mỗi thời
-  /// điểm chỉ hiển thị một bản tin.
-  static const int dailyDigest = 1005;
+  /// Bản tin thời tiết hằng ngày — mỗi mốc (sáng/chiều) một ID riêng vì cả hai
+  /// được lập lịch song song qua zonedSchedule (chung ID sẽ ghi đè nhau).
+  static const int dailyDigestMorning = 1005;
+  static const int dailyDigestEvening = 1006;
 }

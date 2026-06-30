@@ -32,7 +32,7 @@ backend/
 ```
 mobile/
 ├── lib/
-│   ├── main.dart                 # ProviderScope, init timezone/notif/permission/background, MaterialApp.router
+│   ├── main.dart                 # ProviderScope, init timezone (+ setLocalLocation), notif/permission/background, lập lịch digest, AppLifecycleListener (resume→refresh), MaterialApp.router
 │   ├── core/
 │   │   ├── app_router.dart        # GoRouter: '/' Weather · '/map' Map&News · '/routes' RouteScreen · '/settings' Settings
 │   │   ├── config/app_config.dart # API key (--dart-define) + ngưỡng mưa/pin/chu kỳ
@@ -46,7 +46,7 @@ mobile/
 │   │   │   ├── failures.dart        # sealed Failure (Network/Server/Cache/Permission/Unexpected)
 │   │   │   └── exceptions.dart      # exceptions tầng data
 │   │   ├── permissions/permission_service.dart   # geolocator + permission_handler
-│   │   ├── notifications/notification_service.dart # flutter_local_notifications + channel + IDs
+│   │   ├── notifications/notification_service.dart # flutter_local_notifications: show (BigText) + scheduleDaily/cancel (zonedSchedule) + IDs
 │   │   └── background/background_worker.dart       # WorkManager: scheduler + callbackDispatcher
 │   ├── shared/
 │   │   ├── utils/error_handler.dart   # extractUserMessage(e)
@@ -55,7 +55,7 @@ mobile/
 │       ├── location/   # domain(Coordinates, Place, repo) · data(datasource geolocator+geocoding, repo impl) · presentation(providers: current/stream/place)
 │       ├── settings/   # presentation(SettingsScreen): chọn theme/bảng màu/Material You/đổi-màu-theo-thời-tiết + quyền thông báo + guide pin
 │       ├── weather/    # domain(entities, usecases AnalyzeRain/DetectEnvChange) · data(model mapper, datasources, repo) · presentation(providers, WeatherScreen, widgets)
-│       ├── alerts/     # domain(WeatherAlert, BuildWeatherAlerts, BuildDailyDigest) · data(AlertStateStore, NotificationPrefsStore) · presentation(notificationSettingsProvider)
+│       ├── alerts/     # domain(WeatherAlert, BuildWeatherAlerts, BuildDailyDigest) · data(AlertStateStore, NotificationPrefsStore, digest_scheduler) · presentation(notificationSettingsProvider)
 │       ├── map_news/   # MODULE 1: NewsItem · RssDataSource (xml) · NewsRepositoryImpl · MapScreen (flutter_map + lớp mưa OWM + tin RSS)
 │       └── fixed_route/# MODULE 2: RoutePoint/Poi · RouteLocalDataSource (Drift) · OverpassDataSource · PoiRepositoryImpl · RouteScreen (flutter_map) · poi_visuals
 ├── assets/icon/        # app_icon.png (logo) — nguồn sinh launcher icon & splash

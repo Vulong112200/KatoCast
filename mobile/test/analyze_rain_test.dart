@@ -113,5 +113,47 @@ void main() {
       expect(status.minutesUntilChange, 120);
       expect(status.fromMinutely, false);
     });
+
+    test('onset quá xa (> tầm nhìn 120\') ⇒ coi như dry', () {
+      // Mưa ở giờ thứ 3 (180\') > rainSoonHorizonMinutes ⇒ chưa báo sắp mưa.
+      final status = sut.call(_data(hourly: [
+        h(12, 0.1, 0),
+        h(13, 0.1, 0),
+        h(14, 0.2, 0),
+        h(15, 0.9, 3.0),
+      ]));
+      expect(status.phase, RainPhase.dry);
+    });
+  });
+
+  group('AnalyzeRain - xác suất mưa (probabilityPct)', () {
+    HourlyForecast h(int hour, double pop, double rain) => HourlyForecast(
+          time: DateTime(2026, 6, 25, hour),
+          tempC: 30,
+          humidity: 70,
+          pop: pop,
+          rainMm: rain,
+          description: '',
+          icon: '',
+        );
+
+    test('điền probabilityPct từ hourly.pop tại giờ onset', () {
+      // minutely báo mưa ở phút 20 (~giờ 0) → dùng pop của giờ đầu = 0.7 → 70%.
+      final minutely = List<double>.filled(60, 0.0);
+      for (var i = 20; i < 60; i++) {
+        minutely[i] = 1.5;
+      }
+      final status = sut.call(_data(
+        minutely: minutely,
+        hourly: [h(12, 0.7, 0), h(13, 0.9, 2.0)],
+      ));
+      expect(status.phase, RainPhase.rainStartingSoon);
+      expect(status.probabilityPct, 70);
+    });
+
+    test('không có hourly ⇒ probabilityPct null', () {
+      final status = sut.call(_data(minutely: List<double>.filled(60, 0.0)));
+      expect(status.probabilityPct, isNull);
+    });
   });
 }

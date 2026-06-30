@@ -14,4 +14,8 @@ abstract class WeatherRepository {
     Coordinates coords, {
     bool forceRefresh = false,
   });
+
+  /// Đọc thẳng cache (không gọi mạng). null nếu chưa có cache cho toạ độ này.
+  /// Dùng để hiển thị tức thì khi mở app (stale-while-revalidate).
+  Future<WeatherData?> getCachedWeather(Coordinates coords);
 }

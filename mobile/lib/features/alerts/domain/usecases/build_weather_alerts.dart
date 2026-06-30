@@ -34,10 +34,20 @@ class BuildWeatherAlerts {
           alerts.add(WeatherAlert(
             id: NotificationIds.rainStart,
             title: 'Sắp mưa tại khu vực của bạn',
-            body: 'Dự kiến trời sẽ mưa trong $n phút tới tại vị trí của bạn. '
+            body: 'Dự kiến mưa lúc ${_clockAfter(n)} (khoảng $n phút tới) tại '
+                'vị trí của bạn.${_chanceSuffix(rain.probabilityPct)} '
                 'Hãy chuẩn bị áo mưa và chú ý đường trơn trượt.',
           ));
         case RainPhase.rainStoppingSoon:
+          if (_wasRaining(previousPhase)) {
+            final n = rain.minutesUntilChange ?? 0;
+            alerts.add(WeatherAlert(
+              id: NotificationIds.rainStop,
+              title: 'Mưa sắp tạnh',
+              body: 'Mưa dự kiến tạnh lúc ${_clockAfter(n)} (khoảng $n phút '
+                  'tới). Đường vẫn còn ướt, hãy di chuyển cẩn thận.',
+            ));
+          }
         case RainPhase.dry:
           if (_wasRaining(previousPhase)) {
             alerts.add(const WeatherAlert(
@@ -49,10 +59,11 @@ class BuildWeatherAlerts {
           }
         case RainPhase.raining:
           if (!_wasRaining(previousPhase)) {
-            alerts.add(const WeatherAlert(
+            alerts.add(WeatherAlert(
               id: NotificationIds.rainStart,
               title: 'Trời đang mưa',
-              body: 'Hiện đang có mưa tại vị trí của bạn. '
+              body: 'Hiện đang có mưa tại vị trí của bạn.'
+                  '${_chanceSuffix(rain.probabilityPct, raining: true)} '
                   'Hãy chuẩn bị áo mưa và chú ý đường trơn trượt.',
             ));
           }
@@ -90,6 +101,21 @@ class BuildWeatherAlerts {
 
   bool _wasRaining(RainPhase? p) =>
       p == RainPhase.raining || p == RainPhase.rainStoppingSoon;
+
+  /// Mốc giờ đồng hồ (HH:MM) sau [minutes] phút kể từ bây giờ.
+  String _clockAfter(int minutes) {
+    final t = DateTime.now().add(Duration(minutes: minutes));
+    return '${t.hour.toString().padLeft(2, '0')}:'
+        '${t.minute.toString().padLeft(2, '0')}';
+  }
+
+  /// Hậu tố " Khả năng mưa ~P%." nếu có dữ liệu xác suất; rỗng nếu không.
+  String _chanceSuffix(int? pct, {bool raining = false}) {
+    if (pct == null) return '';
+    return raining
+        ? ' Khả năng còn mưa khoảng $pct%.'
+        : ' Khả năng mưa khoảng $pct%.';
+  }
 }
 
 /// Kết quả: thông báo cần gửi + trạng thái mới để PERSIST (cho lần check sau).

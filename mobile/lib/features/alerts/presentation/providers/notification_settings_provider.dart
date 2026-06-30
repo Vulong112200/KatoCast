@@ -1,17 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/di/providers.dart';
+import '../../../weather/presentation/providers/weather_provider.dart';
+import '../../data/digest_scheduler.dart';
 import '../../data/notification_prefs_store.dart';
 
 /// Quản lý + lưu trữ cài đặt "Bản tin hằng ngày". Đọc 1 lần lúc khởi tạo, ghi
 /// mỗi khi đổi. Lưu qua [NotificationPrefsStore] (dùng chung với background).
+/// Mỗi lần đổi cài đặt → lập lịch lại bản tin (qua alarm hệ thống) để áp dụng
+/// giờ/bật-tắt mới ngay.
 class NotificationSettingsController extends StateNotifier<DigestPrefs> {
-  NotificationSettingsController(this._store)
+  NotificationSettingsController(this._store, this._ref)
       : super(const DigestPrefs.defaults()) {
     _load();
   }
 
   final NotificationPrefsStore _store;
+  final Ref _ref;
 
   Future<void> _load() async {
     state = await _store.read();
@@ -20,24 +26,35 @@ class NotificationSettingsController extends StateNotifier<DigestPrefs> {
   Future<void> setEnabled(bool value) async {
     state = state.copyWith(enabled: value);
     await _store.setEnabled(value);
+    await _reschedule();
   }
 
   Future<void> setMorning(TimeOfDay time) async {
     final minutes = time.hour * 60 + time.minute;
     state = state.copyWith(morningMinutes: minutes);
     await _store.setMorning(minutes);
+    await _reschedule();
   }
 
   Future<void> setEvening(TimeOfDay time) async {
     final minutes = time.hour * 60 + time.minute;
     state = state.copyWith(eveningMinutes: minutes);
     await _store.setEvening(minutes);
+    await _reschedule();
+  }
+
+  /// Lập lịch lại với dữ liệu thời tiết hiện có (nếu chưa có → tắt thì vẫn huỷ,
+  /// bật thì lần fetch sau sẽ điền nội dung).
+  Future<void> _reschedule() async {
+    final notif = _ref.read(notificationServiceProvider);
+    final data = _ref.read(weatherProvider).value;
+    await scheduleDigests(notif, state, data);
   }
 }
 
 final notificationSettingsProvider =
     StateNotifierProvider<NotificationSettingsController, DigestPrefs>(
-  (ref) => NotificationSettingsController(NotificationPrefsStore()),
+  (ref) => NotificationSettingsController(NotificationPrefsStore(), ref),
 );
 
 /// Tiện ích đổi phút-trong-ngày sang [TimeOfDay] để hiển thị / time picker.

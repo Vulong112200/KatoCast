@@ -25,17 +25,23 @@ class RainStatus {
   /// Nguồn dữ liệu suy ra: minutely (chính xác) hay hourly (fallback).
   final bool fromMinutely;
 
+  /// Xác suất mưa (%) quanh thời điểm liên quan, suy từ `hourly.pop`. null nếu
+  /// không có dữ liệu giờ để ước lượng.
+  final int? probabilityPct;
+
   const RainStatus({
     required this.phase,
     this.minutesUntilChange,
     required this.fromMinutely,
+    this.probabilityPct,
   });
 
   const RainStatus.dry({this.fromMinutely = true})
       : phase = RainPhase.dry,
-        minutesUntilChange = null;
+        minutesUntilChange = null,
+        probabilityPct = null;
 
-  const RainStatus.raining({this.fromMinutely = true})
+  const RainStatus.raining({this.fromMinutely = true, this.probabilityPct})
       : phase = RainPhase.raining,
         minutesUntilChange = null;
 

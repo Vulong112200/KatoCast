@@ -51,6 +51,14 @@ class WeatherRepositoryImpl implements WeatherRepository {
     }
   }
 
+  @override
+  Future<WeatherData?> getCachedWeather(Coordinates coords) async {
+    final cached = await _local.read(coords);
+    if (cached == null) return null;
+    final (json, fetchedAt) = cached;
+    return WeatherMapper.fromOneCallJson(json, fetchedAt: fetchedAt);
+  }
+
   /// Đọc cache; trả [fallbackFailure] nếu không có.
   Future<Either<Failure, WeatherData>> _fromCacheOr(
     Coordinates coords,
@@ -64,8 +72,13 @@ class WeatherRepositoryImpl implements WeatherRepository {
 }
 
 extension WeatherFreshness on WeatherData {
-  /// Cache còn "tươi" không (để UI quyết định hiển thị badge offline/cũ).
-  bool get isStale =>
-      DateTime.now().difference(fetchedAt).inMinutes >
-      AppConfig.cacheFreshnessMinutes;
+  /// Tuổi của dữ liệu cache.
+  Duration get age => DateTime.now().difference(fetchedAt);
+
+  /// Cache đã "cũ" để hiển thị badge nhắc người dùng (ngưỡng rộng hơn).
+  bool get isStale => age.inMinutes > AppConfig.cacheFreshnessMinutes;
+
+  /// Có cần gọi API làm mới khi mở app không (ngưỡng khớp chu kỳ nền 15').
+  bool get needsRevalidate =>
+      age.inMinutes >= AppConfig.weatherRevalidateMinutes;
 }
