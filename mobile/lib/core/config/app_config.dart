@@ -66,8 +66,10 @@ class AppConfig {
   static const int cacheMaxAgeDays = 7;
 
   /// Vị trí "last known" cũ hơn ngưỡng này (giờ) coi là không đáng tin ở
-  /// background → bỏ qua lần check để tránh cảnh báo nhầm khu vực.
-  static const int backgroundLastKnownMaxAgeHours = 3;
+  /// background → fallback sang toạ độ đã lưu (LastLocationStore) thay vì bỏ
+  /// qua. 24h vì máy đứng yên qua đêm ở nhà là bình thường, vị trí cũ vẫn đúng
+  /// khu vực; điều này cho phép bản tin sáng dùng dữ liệu tươi.
+  static const int backgroundLastKnownMaxAgeHours = 24;
 
   // --- Bản tin thời tiết hằng ngày ---
 
@@ -79,6 +81,11 @@ class AppConfig {
 
   /// Ngưỡng chỉ số UV để nhắc chống nắng trong bản tin.
   static const double digestUvWarnThreshold = 6.0;
+
+  /// Ngưỡng xác suất mưa (pop 0..1) coi một giờ là "có khả năng mưa" khi quét
+  /// dự báo cả ngày cho bản tin (BuildRainOutlook). Thấp hơn ngưỡng cảnh báo
+  /// tức thời vì đây là thông tin định hướng ("chiều nay có thể mưa").
+  static const double rainOutlookPopThreshold = 0.4;
 
   // --- Định danh & endpoint dịch vụ ngoài ---
 

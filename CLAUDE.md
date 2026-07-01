@@ -61,8 +61,8 @@
 | Giao diện & cá nhân hóa (theme) | ✅ | — | `core/theme/*` + `features/settings/*` | Sáng/Tối/Hệ thống + bảng màu chọn sẵn + Material You (dynamic_color) + đổi màu theo thời tiết; lưu SharedPreferences; màn Settings (+ guide pin) |
 | Thời tiết (weather) | ✅ | — | `features/weather/*` | One Call **4.0** (3 endpoint→chuẩn hoá); offline-first cache Drift; **stale-while-revalidate** (mở app hiện cache ngay, chỉ gọi API khi cache ≥15'); `AnalyzeRain` (kèm `probabilityPct`), `DetectEnvChange`; `connectivityStatusProvider` cho badge offline |
 | Phân loại tình hình (condition) | ✅ | — | `weather/domain/entities/weather_condition.dart` + `ConditionCard` | nắng/mây/mưa nhỏ-to/dông/bão lớn/lốc + nhãn + lời khuyên + mức độ |
-| Thông báo thông minh (alerts) | ✅ | — | `features/alerts/*` + `core/background` + `core/notifications` | WorkManager 15', 3 nhóm (mưa/tình hình/môi trường), cá nhân hóa, chống spam; nội dung mưa kèm **giờ cụ thể (HH:MM) + % khả năng mưa**; `BigTextStyleInformation` chống cắt chữ |
-| Bản tin thời tiết hằng ngày (digest) | ✅ | — | `features/alerts/*` (BuildDailyDigest, NotificationPrefsStore, notificationSettingsProvider, **digest_scheduler**) + `core/notifications` | Tự gửi tóm tắt vào khung giờ cố định (mặc định 6h30 & 16h30); dùng **alarm hệ thống `zonedSchedule`** (lặp ngày, `inexactAllowWhileIdle`) thay vì piggyback worker → bắn đúng giờ kể cả khi app bị tắt; nội dung lập lịch lại khi mở app / worker chạy / đổi cài đặt |
+| Thông báo thông minh (alerts) | ✅ | — | `features/alerts/*` + `core/background` + `core/notifications` | WorkManager 15', 3 nhóm (mưa/tình hình/môi trường), cá nhân hóa, chống spam; nội dung mưa kèm **giờ cụ thể (HH:MM) + % khả năng mưa**; `BigTextStyleInformation` chống cắt chữ. Toạ độ nền qua `resolveBackgroundCoords` (last-known ≤24h / fallback `LastLocationStore`) để không bỏ fetch qua đêm; prompt bỏ giới hạn pin lần đầu (Xiaomi/HyperOS) |
+| Bản tin thời tiết hằng ngày (digest) | ✅ | — | `features/alerts/*` (BuildDailyDigest, NotificationPrefsStore, notificationSettingsProvider, **digest_scheduler**) + `core/background/digest_alarm` + `weather/.../build_rain_outlook` | Tự gửi tóm tắt vào khung giờ cố định (mặc định 6h30 & 16h30) qua **`android_alarm_manager_plus`** (`periodic` exact+wakeup+allowWhileIdle+rescheduleOnReboot); tại mốc giờ `digestAlarmCallback` **fetch dữ liệu tươi rồi mới hiển thị** (sửa lỗi zonedSchedule bake text cũ). Nội dung có **outlook mưa cả ngày theo buổi** (`BuildRainOutlook`: "chiều ~14–16h có mưa, ~70%") + gợi ý mưa tức thời + hi/lo + UV |
 | Module 1 — Map & News | ✅ | — | `features/map_news/*` | bản đồ OSM (flutter_map) + lớp mưa OWM; tin tức RSS thời tiết (`MapScreen`, `/map`) |
 | Module 2 — Fixed Route POI | ✅ | — | `features/fixed_route/*` | lưu lộ trình (Drift) + quét POI dọc đường qua Overpass/OSM (`RouteScreen`, `/routes`) |
 
@@ -114,7 +114,10 @@
 - `mobile/lib/features/weather/domain/usecases/analyze_rain.dart` (logic mưa cốt lõi)
 - `mobile/lib/features/alerts/domain/usecases/build_weather_alerts.dart` (sinh thông báo sự kiện)
 - `mobile/lib/features/alerts/domain/usecases/build_daily_digest.dart` (sinh bản tin hằng ngày)
-- `mobile/lib/features/alerts/data/digest_scheduler.dart` (lập lịch bản tin qua alarm hệ thống)
+- `mobile/lib/features/weather/domain/usecases/build_rain_outlook.dart` (outlook mưa cả ngày theo buổi)
+- `mobile/lib/features/alerts/data/digest_scheduler.dart` (lập lịch bản tin qua AlarmManager)
+- `mobile/lib/core/background/digest_alarm.dart` (callback alarm: fetch tươi → hiển thị bản tin)
+- `mobile/lib/core/background/background_location.dart` (resolveBackgroundCoords cho isolate nền)
 - `mobile/lib/features/alerts/data/notification_prefs_store.dart` (cài đặt bản tin)
 - `mobile/lib/core/notifications/notification_service.dart` (show + scheduleDaily/cancel, BigText)
 - `mobile/lib/core/theme/theme_controller.dart` (cài đặt giao diện + precedence seed)

@@ -12,6 +12,11 @@
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <!-- Xin tắt tối ưu hóa pin để thông báo nền chạy ổn định (whitelist). -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
+    <!-- Alarm ĐÚNG GIỜ cho bản tin hằng ngày (android_alarm_manager_plus).
+         USE_EXACT_ALARM tự cấp trên Android 13+ (app dạng lịch/nhắc nhở);
+         SCHEDULE_EXACT_ALARM dự phòng cho Android 12. -->
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM"/>
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
 
     <application
         android:label="KatoCast"

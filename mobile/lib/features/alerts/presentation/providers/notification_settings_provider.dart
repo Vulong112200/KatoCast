@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../core/di/providers.dart';
-import '../../../weather/presentation/providers/weather_provider.dart';
 import '../../data/digest_scheduler.dart';
 import '../../data/notification_prefs_store.dart';
 
@@ -11,13 +9,12 @@ import '../../data/notification_prefs_store.dart';
 /// Mỗi lần đổi cài đặt → lập lịch lại bản tin (qua alarm hệ thống) để áp dụng
 /// giờ/bật-tắt mới ngay.
 class NotificationSettingsController extends StateNotifier<DigestPrefs> {
-  NotificationSettingsController(this._store, this._ref)
+  NotificationSettingsController(this._store)
       : super(const DigestPrefs.defaults()) {
     _load();
   }
 
   final NotificationPrefsStore _store;
-  final Ref _ref;
 
   Future<void> _load() async {
     state = await _store.read();
@@ -43,18 +40,16 @@ class NotificationSettingsController extends StateNotifier<DigestPrefs> {
     await _reschedule();
   }
 
-  /// Lập lịch lại với dữ liệu thời tiết hiện có (nếu chưa có → tắt thì vẫn huỷ,
-  /// bật thì lần fetch sau sẽ điền nội dung).
+  /// Lập lịch lại alarm theo cài đặt mới. Nội dung không bake ở đây — callback
+  /// alarm tự fetch tươi lúc bắn.
   Future<void> _reschedule() async {
-    final notif = _ref.read(notificationServiceProvider);
-    final data = _ref.read(weatherProvider).value;
-    await scheduleDigests(notif, state, data);
+    await scheduleDigests(state);
   }
 }
 
 final notificationSettingsProvider =
     StateNotifierProvider<NotificationSettingsController, DigestPrefs>(
-  (ref) => NotificationSettingsController(NotificationPrefsStore(), ref),
+  (ref) => NotificationSettingsController(NotificationPrefsStore()),
 );
 
 /// Tiện ích đổi phút-trong-ngày sang [TimeOfDay] để hiển thị / time picker.

@@ -3,6 +3,7 @@ import '../../../weather/domain/entities/rain_status.dart';
 import '../../../weather/domain/entities/weather.dart';
 import '../../../weather/domain/entities/weather_condition.dart';
 import '../../../weather/domain/usecases/analyze_rain.dart';
+import '../../../weather/domain/usecases/build_rain_outlook.dart';
 
 /// Nội dung bản tin thời tiết hằng ngày (tiêu đề + thân thông báo).
 class DailyDigest {
@@ -49,7 +50,11 @@ class BuildDailyDigest {
       parts.add(condition.advice);
     }
 
-    // Gợi ý mưa sắp tới (tái dùng AnalyzeRain).
+    // Tổng quan mưa CẢ NGÀY theo buổi (trả lời "hôm nay có mưa không, mấy giờ").
+    final outlook = const BuildRainOutlook().call(data);
+    if (outlook != null) parts.add(outlook);
+
+    // Gợi ý mưa TỨC THỜI (đang/sắp mưa trong ~2h tới) — bổ sung cho outlook.
     final rain = const AnalyzeRain().call(data);
     final rainHint = _rainHint(rain);
     if (rainHint != null) parts.add(rainHint);

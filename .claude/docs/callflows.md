@@ -98,29 +98,29 @@ MapScreen → flutter_map (tile OSM + lớp mưa OWM) center theo currentLocatio
 ```
 WorkManager periodic 15' → callbackDispatcher (isolate riêng, tự dựng DI)
    ▼
-Geolocator.getLastKnownPosition → WeatherRepository.getWeather(forceRefresh)
+resolveBackgroundCoords (last-known ≤24h / fallback LastLocationStore)
+   ▼  (null → bỏ lần này; không còn chặn cứng 3h → fetch được qua đêm)
+WeatherRepository.getWeather(forceRefresh)
    ▼
 AnalyzeRain + DetectEnvChange → BuildWeatherAlerts(rain, env, previousPhase từ AlertStateStore)
    │ chỉ sinh alert khi PHA đổi (chống spam)
    ▼
 NotificationService.show(id cố định theo loại) → AlertStateStore.write(phase mới)
    ▼ (cùng lần chạy, kênh độc lập)
-NotificationPrefsStore.read() → scheduleDigests(notif, prefs, data)
-   │ enabled=false → cancel cả 2 mốc; else BuildDailyDigest(data) →
-   ▼
-NotificationService.scheduleDaily(morning/evening) = zonedSchedule lặp ngày
-   (inexactAllowWhileIdle) → ALARM HỆ THỐNG tự bắn đúng mốc giờ kể cả app đã tắt
+NotificationPrefsStore.read() → scheduleDigests(prefs)  [chỉ lập/huỷ lịch, KHÔNG bake nội dung]
 ```
 
-### 2b. Lập lịch bản tin hằng ngày (không phụ thuộc worker chạy)
+### 2b. Bản tin hằng ngày — alarm FETCH TƯƠI tại thời điểm bắn
 ```
-scheduleDigests được gọi lại để nội dung tươi nhất có thể:
-  • main `_bootstrap` (mở app, dùng cache)         ┐
-  • NotificationSettingsController (đổi enabled/giờ) ├─▶ NotificationService.scheduleDaily
-  • background_worker._runWeatherCheck (sau fetch)  ┘     (ghi đè lịch cũ cùng ID)
-   ▼
-Đến mốc giờ → AlarmManager → ScheduledNotificationReceiver (AndroidManifest) → hiển thị
-   (ScheduledNotificationBootReceiver lập lại lịch sau khi khởi động lại máy)
+scheduleDigests(prefs) được gọi để lịch khớp cài đặt (không cần WeatherData):
+  • main `_bootstrap` (mở app)                       ┐
+  • NotificationSettingsController (đổi enabled/giờ) ├─▶ AndroidAlarmManager.periodic
+  • background_worker._runWeatherCheck               ┘     (id morning/evening; exact+wakeup+allowWhileIdle+rescheduleOnReboot)
+   ▼  enabled=false → AndroidAlarmManager.cancel cả 2 id
+Đến mốc giờ → AlarmManager đánh thức isolate → digestAlarmCallback(id):
+   resolveBackgroundCoords → getWeather(forceRefresh) → BuildDailyDigest
+   (gồm BuildRainOutlook: quét hourly cả ngày → mưa theo buổi)
+   → NotificationService.show(id)   ← DỮ LIỆU TƯƠI, không phải text lập lịch sẵn
 ```
 
 ### Error mapping (đã áp dụng)

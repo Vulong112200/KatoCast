@@ -1,12 +1,10 @@
 import 'package:connectivity_plus/connectivity_plus.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:workmanager/workmanager.dart';
 
 import '../../features/alerts/data/alert_state_store.dart';
 import '../../features/alerts/data/digest_scheduler.dart';
 import '../../features/alerts/data/notification_prefs_store.dart';
 import '../../features/alerts/domain/usecases/build_weather_alerts.dart';
-import '../../features/location/domain/entities/coordinates.dart';
 import '../../features/weather/data/datasources/weather_local_datasource.dart';
 import '../../features/weather/data/datasources/weather_remote_datasource.dart';
 import '../../features/weather/data/repositories/weather_repository_impl.dart';
@@ -18,6 +16,7 @@ import '../database/app_database.dart';
 import '../network/api_client.dart';
 import '../network/network_info.dart';
 import '../notifications/notification_service.dart';
+import 'background_location.dart';
 
 const String kWeatherCheckTask = 'katocast.weatherCheck';
 
@@ -61,15 +60,9 @@ void callbackDispatcher() {
 }
 
 Future<void> _runWeatherCheck() async {
-  // 1. Vị trí: dùng last-known cho nhanh & tiết kiệm pin trong nền.
-  final pos = await Geolocator.getLastKnownPosition();
-  if (pos == null) return;
-  // Bỏ qua nếu vị trí quá cũ → tránh cảnh báo nhầm khu vực người dùng đã rời đi.
-  final age = DateTime.now().difference(pos.timestamp);
-  if (age > const Duration(hours: AppConfig.backgroundLastKnownMaxAgeHours)) {
-    return;
-  }
-  final coords = Coordinates(latitude: pos.latitude, longitude: pos.longitude);
+  // 1. Vị trí: last-known (hoặc toạ độ đã lưu nếu last-known hết hạn).
+  final coords = await resolveBackgroundCoords();
+  if (coords == null) return;
 
   // 2. Dựng dependency cục bộ cho isolate.
   final db = AppDatabase();
@@ -126,11 +119,11 @@ Future<void> _runWeatherCheck() async {
       envNotified: out.envNotified,
     );
 
-    // 6. Bản tin hằng ngày: lập lịch lại (qua alarm hệ thống) với nội dung vừa
-    // fetch để nội dung tươi nhất có thể; alarm tự bắn đúng mốc giờ kể cả khi
-    // app bị tắt — không còn phụ thuộc worker chạy đúng khung giờ.
+    // 6. Bản tin hằng ngày: đảm bảo alarm hệ thống đã được lập đúng mốc giờ
+    // theo cài đặt hiện tại. Nội dung KHÔNG bake ở đây — callback alarm tự
+    // fetch dữ liệu tươi ngay lúc bắn (kể cả khi app đã tắt).
     final dp = await NotificationPrefsStore().read();
-    await scheduleDigests(notif, dp, data);
+    await scheduleDigests(dp);
   } finally {
     await db.close();
   }

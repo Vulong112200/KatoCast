@@ -1,7 +1,9 @@
+import 'package:android_alarm_manager_plus/android_alarm_manager_plus.dart';
 import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 
@@ -30,6 +32,13 @@ Future<void> main() async {
   } catch (_) {
     // Không lấy được tên múi giờ → giữ mặc định, app vẫn chạy.
   }
+
+  // Khởi tạo AlarmManager để chạy callback nền cho bản tin hằng ngày đúng mốc
+  // giờ (kể cả app đã tắt). Bọc try để app không chết nếu plugin lỗi/không hỗ
+  // trợ nền tảng (vd iOS) — bản tin khi đó sẽ chỉ lập lịch được khi mở app.
+  try {
+    await AndroidAlarmManager.initialize();
+  } catch (_) {}
 
   runApp(const ProviderScope(child: KatoCastApp()));
 }
@@ -78,23 +87,35 @@ class _KatoCastAppState extends ConsumerState<KatoCastApp> {
       await BackgroundScheduler.initialize();
     } catch (_) {}
 
+    // 2b. Lần đầu chạy: xin bỏ giới hạn pin (whitelist) để nền chạy ổn định
+    //     trên các máy diệt tiến trình mạnh (Xiaomi/HyperOS, Oppo…). Chỉ hỏi
+    //     một lần để không làm phiền; sau đó người dùng tự chỉnh trong Settings.
+    await _promptBatteryOnce();
+
     // 3. Lập lịch bản tin hằng ngày qua alarm hệ thống (đáng tin hơn
     //    WorkManager). Nội dung lấy từ cache mới nhất; mỗi lần worker chạy /
     //    đổi cài đặt sẽ lập lịch lại để nội dung tươi nhất có thể.
     await _rescheduleDigests();
   }
 
+  Future<void> _promptBatteryOnce() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      const key = 'battery_prompt_shown';
+      if (prefs.getBool(key) ?? false) return;
+      await prefs.setBool(key, true);
+      await ref.read(permissionServiceProvider).requestIgnoreBatteryOptimizations();
+    } catch (_) {}
+  }
+
   Future<void> _rescheduleDigests() async {
     try {
+      // Chỉ cần lập lịch alarm đúng mốc giờ theo cài đặt; nội dung sẽ được
+      // callback tự fetch tươi lúc bắn nên KHÔNG cần đợi weatherProvider ở đây.
       final prefs = await NotificationPrefsStore().read();
-      // Lấy thời tiết hiện có (cache hoặc fetch) để dựng nội dung bản tin.
-      final data = await ref.read(weatherProvider.future).timeout(
-            const Duration(seconds: 20),
-            onTimeout: () => throw Exception('timeout'),
-          );
-      await scheduleDigests(ref.read(notificationServiceProvider), prefs, data);
+      await scheduleDigests(prefs);
     } catch (_) {
-      // Không có dữ liệu → bỏ qua, lần fetch nền sau sẽ lập lịch lại.
+      // Lỗi lập lịch (vd nền tảng không hỗ trợ AlarmManager) → bỏ qua.
     }
   }
 

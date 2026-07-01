@@ -15,12 +15,8 @@ class LocationRepositoryImpl implements LocationRepository {
   @override
   Future<Either<Failure, Coordinates>> getCurrentLocation() async {
     try {
-      // Ưu tiên vị trí "last-known" cho phản hồi tức thì (đủ chính xác cho cache
-      // thời tiết key theo toạ độ làm tròn ~1km) → tránh chờ GPS độ chính xác
-      // cao >10s lúc mở app. Chưa có last-known mới chờ định vị đầy đủ.
-      final last = await _dataSource.getLastKnown();
-      if (last != null) return Right(_toCoordinates(last));
-
+      // Tối ưu last-known nằm TRONG getCurrentPosition (đã xin quyền trước) để
+      // bảo đảm hộp thoại quyền luôn hiện trước khi đọc vị trí.
       final pos = await _dataSource.getCurrentPosition();
       return Right(_toCoordinates(pos));
     } on LocationPermissionException catch (e) {

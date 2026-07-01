@@ -10,10 +10,22 @@ class LocationDataSource {
   LocationDataSource(this._permissions);
 
   Future<Position> getCurrentPosition() async {
+    // Xin quyền TRƯỚC (hiện hộp thoại nếu cần) — bắt buộc trước mọi lần đọc vị
+    // trí, kể cả last-known.
     await _permissions.ensureLocationPermission();
+
+    // Sau khi có quyền: ưu tiên vị trí "last-known" cho phản hồi tức thì (đủ
+    // chính xác cho cache thời tiết key theo toạ độ làm tròn ~1km) → tránh chờ
+    // GPS độ chính xác cao lúc mở app.
+    final last = await Geolocator.getLastKnownPosition();
+    if (last != null) return last;
+
+    // Chưa có last-known (vd lần đầu) → lấy vị trí hiện tại, kèm giới hạn thời
+    // gian để không treo UI vô hạn nếu không bắt được tín hiệu.
     return Geolocator.getCurrentPosition(
       locationSettings: const LocationSettings(
         accuracy: LocationAccuracy.high,
+        timeLimit: Duration(seconds: 20),
       ),
     );
   }

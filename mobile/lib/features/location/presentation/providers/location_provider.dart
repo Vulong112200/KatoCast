@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/di/providers.dart';
 import '../../data/datasources/location_datasource.dart';
+import '../../data/last_location_store.dart';
 import '../../data/repositories/location_repository_impl.dart';
 import '../../domain/entities/coordinates.dart';
 import '../../domain/entities/place.dart';
@@ -21,7 +22,12 @@ final locationRepositoryProvider = Provider<LocationRepository>(
 final currentLocationProvider = FutureProvider<Coordinates>((ref) async {
   final repo = ref.watch(locationRepositoryProvider);
   final result = await repo.getCurrentLocation();
-  return result.fold((failure) => throw failure, (coords) => coords);
+  return result.fold((failure) => throw failure, (coords) {
+    // Lưu lại toạ độ tươi để background isolate (worker/bản tin) dùng khi
+    // getLastKnownPosition null/quá cũ — tránh bỏ lỡ fetch cả đêm.
+    LastLocationStore().save(coords);
+    return coords;
+  });
 });
 
 /// Stream vị trí khi di chuyển — dành cho màn hình cần cập nhật liên tục.
