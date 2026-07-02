@@ -71,5 +71,65 @@ void main() {
 
       expect(result, isNull);
     });
+
+    test('2 đợt mưa KHÔNG liên tục trong buổi → tách khung, không gộp', () {
+      final now = DateTime(2026, 7, 1, 11, 0);
+      final hourly = [
+        for (var hour = 11; hour <= 16; hour++)
+          _h(
+            DateTime(2026, 7, 1, hour),
+            (hour == 11 || hour == 15 || hour == 16) ? 0.7 : 0.1,
+          ),
+      ];
+
+      final result = const BuildRainOutlook().call(_data(hourly, now), now: now);
+
+      // 11:00 mưa, 12–14 khô, 15–16 mưa → 2 đợt riêng biệt.
+      expect(result, contains('~11:00–12:00'));
+      expect(result, contains('~15:00–17:00'));
+      expect(result, isNot(contains('~11:00–17:00')));
+    });
+
+    test('mưa 23:00 (giờ khuya) vẫn được báo ở buổi tối', () {
+      final now = DateTime(2026, 7, 1, 18, 0);
+      final hourly = [
+        for (var hour = 18; hour <= 23; hour++)
+          _h(DateTime(2026, 7, 1, hour), hour == 23 ? 0.8 : 0.1),
+      ];
+
+      final result = const BuildRainOutlook().call(_data(hourly, now), now: now);
+
+      expect(result, contains('Tối có mưa'));
+      expect(result, contains('~23:00'));
+    });
+
+    test('mưa rạng sáng (khung Đêm 0–5h) được báo', () {
+      final now = DateTime(2026, 7, 1, 0, 30);
+      final hourly = [
+        for (var hour = 0; hour <= 8; hour++)
+          _h(DateTime(2026, 7, 1, hour), (hour == 3 || hour == 4) ? 0.9 : 0.1),
+      ];
+
+      final result = const BuildRainOutlook().call(_data(hourly, now), now: now);
+
+      expect(result, contains('Đêm có mưa'));
+      expect(result, contains('~03:00–05:00'));
+    });
+
+    test('hơn 2 đợt trong 1 buổi → gộp thành "rải rác nhiều đợt"', () {
+      final now = DateTime(2026, 7, 1, 11, 0);
+      final hourly = [
+        for (var hour = 11; hour <= 16; hour++)
+          _h(
+            DateTime(2026, 7, 1, hour),
+            (hour == 11 || hour == 13 || hour == 15) ? 0.6 : 0.1,
+          ),
+      ];
+
+      final result = const BuildRainOutlook().call(_data(hourly, now), now: now);
+
+      expect(result, contains('rải rác nhiều đợt'));
+      expect(result, contains('~60%'));
+    });
   });
 }

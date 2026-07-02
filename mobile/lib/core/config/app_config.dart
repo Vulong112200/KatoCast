@@ -41,6 +41,24 @@ class AppConfig {
   /// fallback hourly) không báo "sắp mưa" để tránh cảnh báo quá sớm/không sát.
   static const int rainSoonHorizonMinutes = 120;
 
+  /// Ngưỡng xác suất mưa (pop 0..1) để một GIỜ được coi là "ướt" ở fallback
+  /// hourly của AnalyzeRain (cảnh báo tức thời). Cao hơn ngưỡng outlook (0.4)
+  /// vì cảnh báo tức thời cần chắc chắn hơn để tránh báo nhầm.
+  static const double rainAlertPopThreshold = 0.5;
+
+  /// Độ lệch (phút) giữa thời điểm chuyển biến ĐÃ BÁO và dự báo mới đủ lớn để
+  /// gửi thông báo cập nhật lại dù pha mưa không đổi (vd đã báo "mưa 15:30",
+  /// dự báo mới nói 14:20 → cần báo lại).
+  static const int rainTimeShiftRenotifyMinutes = 15;
+
+  /// Floor xác suất (%) khi nowcast minutely đã XÁC NHẬN đang mưa / sắp mưa —
+  /// tránh mâu thuẫn kiểu "Trời đang mưa. Khả năng mưa khoảng 40%."
+  static const int minutelyProbabilityFloorPct = 80;
+
+  /// Dữ liệu thời tiết cũ hơn ngưỡng này (phút) thì background worker KHÔNG
+  /// sinh cảnh báo (tránh báo pha/giờ sai từ cache khi fetch thất bại).
+  static const int alertMaxDataAgeMinutes = 45;
+
   /// Khoảng cách (mét) di chuyển tối thiểu để cập nhật lại vị trí (tối ưu pin).
   static const int locationDistanceFilterMeters = 200;
 

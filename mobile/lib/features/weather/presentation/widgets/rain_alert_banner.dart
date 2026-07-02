@@ -36,23 +36,43 @@ class RainAlertBanner extends StatelessWidget {
   (Color, IconData, String?) _content() {
     switch (status.phase) {
       case RainPhase.rainStartingSoon:
-        final n = status.minutesUntilChange ?? 0;
         return (
           Colors.blue,
           Icons.umbrella,
-          'Dự kiến mưa trong $n phút tới. Chuẩn bị áo mưa và chú ý đường trơn trượt.',
+          'Dự kiến mưa ${_timing()}.${_chance()} '
+              'Chuẩn bị áo mưa và chú ý đường trơn trượt.',
         );
       case RainPhase.raining:
-        return (Colors.indigo, Icons.water_drop, 'Hiện đang có mưa tại vị trí của bạn.');
+        return (
+          Colors.indigo,
+          Icons.water_drop,
+          'Hiện đang có mưa tại vị trí của bạn.${_chance(raining: true)}',
+        );
       case RainPhase.rainStoppingSoon:
-        final n = status.minutesUntilChange ?? 0;
         return (
           Colors.teal,
           Icons.wb_cloudy,
-          'Mưa dự kiến tạnh trong $n phút tới. Đường có thể còn ướt.',
+          'Mưa dự kiến tạnh ${_timing()}. Đường có thể còn ướt.',
         );
       case RainPhase.dry:
         return (Colors.green, Icons.wb_sunny, null);
     }
+  }
+
+  /// "lúc HH:MM (~N phút tới)" từ timestamp dự báo — khớp nội dung notification.
+  String _timing() {
+    final at = status.changeAt;
+    final n = status.minutesUntilChange ?? 0;
+    if (at == null) return n <= 0 ? 'ngay bây giờ' : 'trong ~$n phút tới';
+    if (n <= 0) return 'ngay bây giờ';
+    final clock = '${at.hour.toString().padLeft(2, '0')}:'
+        '${at.minute.toString().padLeft(2, '0')}';
+    return 'lúc $clock (~$n phút tới)';
+  }
+
+  String _chance({bool raining = false}) {
+    final pct = status.probabilityPct;
+    if (pct == null) return '';
+    return raining ? ' Khả năng còn mưa ~$pct%.' : ' Khả năng mưa ~$pct%.';
   }
 }

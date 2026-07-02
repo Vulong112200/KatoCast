@@ -101,11 +101,15 @@ WorkManager periodic 15' → callbackDispatcher (isolate riêng, tự dựng DI)
 resolveBackgroundCoords (last-known ≤24h / fallback LastLocationStore)
    ▼  (null → bỏ lần này; không còn chặn cứng 3h → fetch được qua đêm)
 WeatherRepository.getWeather(forceRefresh)
+   ▼  (data.age > 45' — cache cũ do fetch fail → BỎ sinh cảnh báo, nhảy tới bước lập lịch digest)
+AnalyzeRain(now) [lọc điểm quá khứ, trả changeAt + phút-từ-now] + DetectEnvChange
    ▼
-AnalyzeRain + DetectEnvChange → BuildWeatherAlerts(rain, env, previousPhase từ AlertStateStore)
-   │ chỉ sinh alert khi PHA đổi (chống spam)
+BuildWeatherAlerts(rain, env, previousPhase + previousChangeAt từ AlertStateStore)
+   │ chỉ sinh alert khi PHA đổi (chống spam);
+   │ NGOẠI LỆ: pha giữ nguyên nhưng changeAt lệch ≥15' → alert "Cập nhật:" (cùng ID)
+   │ giờ HH:MM format từ changeAt (không cộng phút vào now → hết drift)
    ▼
-NotificationService.show(id cố định theo loại) → AlertStateStore.write(phase mới)
+NotificationService.show(id cố định theo loại) → AlertStateStore.write(phase + changeAt mới)
    ▼ (cùng lần chạy, kênh độc lập)
 NotificationPrefsStore.read() → scheduleDigests(prefs)  [chỉ lập/huỷ lịch, KHÔNG bake nội dung]
 ```

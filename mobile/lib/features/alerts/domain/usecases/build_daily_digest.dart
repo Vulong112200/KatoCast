@@ -73,18 +73,21 @@ class BuildDailyDigest {
   String? _rainHint(RainStatus rain) {
     final pct = rain.probabilityPct;
     final chance = pct != null ? ' (khả năng ~$pct%)' : '';
+    // Giờ HH:MM lấy từ timestamp dự báo (changeAt), không cộng phút vào
+    // DateTime.now() — tránh lệch giờ khi dữ liệu là cache cũ.
+    final at = rain.changeAt;
     switch (rain.phase) {
       case RainPhase.rainStartingSoon:
         final n = rain.minutesUntilChange;
-        return n != null
-            ? 'Dự kiến mưa lúc ${_clockAfter(n)} (khoảng $n phút tới)$chance.'
+        return at != null && n != null
+            ? 'Dự kiến mưa lúc ${_clock(at)} (khoảng $n phút tới)$chance.'
             : 'Sắp có mưa$chance.';
       case RainPhase.raining:
         return 'Hiện đang có mưa$chance.';
       case RainPhase.rainStoppingSoon:
         final n = rain.minutesUntilChange;
-        return n != null
-            ? 'Mưa dự kiến tạnh lúc ${_clockAfter(n)} (khoảng $n phút tới).'
+        return at != null && n != null
+            ? 'Mưa dự kiến tạnh lúc ${_clock(at)} (khoảng $n phút tới).'
             : 'Mưa sắp tạnh.';
       case RainPhase.dry:
         return null;
@@ -94,8 +97,4 @@ class BuildDailyDigest {
   /// HH:MM của một thời điểm.
   String _clock(DateTime t) =>
       '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
-
-  /// HH:MM sau [minutes] phút kể từ bây giờ.
-  String _clockAfter(int minutes) =>
-      _clock(DateTime.now().add(Duration(minutes: minutes)));
 }

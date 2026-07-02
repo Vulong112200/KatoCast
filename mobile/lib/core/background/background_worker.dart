@@ -83,41 +83,47 @@ Future<void> _runWeatherCheck() async {
     final data = result.fold((_) => null, (d) => d);
     if (data == null) return; // offline & không có cache → bỏ qua lần này.
 
-    // 3. Phân tích + so trạng thái cũ → sinh thông báo.
-    final rain = const AnalyzeRain().call(data);
-    final env = const DetectEnvChange().call(data);
-    final condition = WeatherCondition.classify(
-      data.current.conditionId,
-      rainMmH: data.current.rain1h,
-    );
+    // Dữ liệu quá cũ (fetch fail → repo trả cache) → KHÔNG sinh cảnh báo để
+    // tránh báo pha/giờ sai; vẫn đảm bảo lịch bản tin ở bước cuối.
+    if (data.age.inMinutes <= AppConfig.alertMaxDataAgeMinutes) {
+      // 3. Phân tích + so trạng thái cũ → sinh thông báo.
+      final rain = const AnalyzeRain().call(data);
+      final env = const DetectEnvChange().call(data);
+      final condition = WeatherCondition.classify(
+        data.current.conditionId,
+        rainMmH: data.current.rain1h,
+      );
 
-    final store = AlertStateStore();
-    final prev = await store.read();
+      final store = AlertStateStore();
+      final prev = await store.read();
 
-    final out = const BuildWeatherAlerts().call(
-      rain: rain,
-      condition: condition,
-      env: env,
-      previousPhase: prev.phase,
-      previousCategory: prev.category,
-      envAlreadyNotified: prev.envNotified,
-    );
+      final out = const BuildWeatherAlerts().call(
+        rain: rain,
+        condition: condition,
+        env: env,
+        previousPhase: prev.phase,
+        previousCategory: prev.category,
+        previousChangeAt: prev.changeAt,
+        envAlreadyNotified: prev.envNotified,
+      );
 
-    // 4. Gửi notification cảnh báo sự kiện.
-    final notif = NotificationService();
-    if (out.alerts.isNotEmpty) {
-      await notif.init();
-      for (final a in out.alerts) {
-        await notif.show(id: a.id, title: a.title, body: a.body);
+      // 4. Gửi notification cảnh báo sự kiện.
+      final notif = NotificationService();
+      if (out.alerts.isNotEmpty) {
+        await notif.init();
+        for (final a in out.alerts) {
+          await notif.show(id: a.id, title: a.title, body: a.body);
+        }
       }
-    }
 
-    // 5. Lưu trạng thái cho lần sau.
-    await store.write(
-      phase: out.newPhase,
-      category: out.newCategory,
-      envNotified: out.envNotified,
-    );
+      // 5. Lưu trạng thái cho lần sau.
+      await store.write(
+        phase: out.newPhase,
+        category: out.newCategory,
+        changeAt: out.newChangeAt,
+        envNotified: out.envNotified,
+      );
+    }
 
     // 6. Bản tin hằng ngày: đảm bảo alarm hệ thống đã được lập đúng mốc giờ
     // theo cài đặt hiện tại. Nội dung KHÔNG bake ở đây — callback alarm tự
