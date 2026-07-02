@@ -1,6 +1,8 @@
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/timezone.dart' as tz;
 
+import 'notification_response_handler.dart';
+
 /// Wrapper quanh flutter_local_notifications.
 ///
 /// Dùng cả ở foreground (khi mở app) lẫn trong background isolate
@@ -11,6 +13,13 @@ class NotificationService {
   static const String _channelName = 'Cảnh báo thời tiết';
   static const String _channelDesc =
       'Thông báo chủ động về mưa và thay đổi thời tiết quanh bạn.';
+
+  /// Channel ghi chú GHIM (sticky): im lặng (low) — không heads-up mỗi lần
+  /// re-assert; notification vẫn hiện cố định trên khay.
+  static const String notePinnedChannelId = 'note_pinned';
+
+  /// Channel NHẮC ghi chú theo lịch: high để heads-up đúng giờ hẹn.
+  static const String noteReminderChannelId = 'note_reminders';
 
   final FlutterLocalNotificationsPlugin _plugin =
       FlutterLocalNotificationsPlugin();
@@ -25,7 +34,16 @@ class NotificationService {
     const initSettings =
         InitializationSettings(android: androidInit, iOS: iosInit);
 
-    await _plugin.initialize(initSettings);
+    // Callbacks: chạm thân notification (main isolate) + nút action chạy nền
+    // (isolate riêng — cần ActionBroadcastReceiver trong AndroidManifest).
+    await _plugin.initialize(
+      initSettings,
+      onDidReceiveNotificationResponse: onNotificationTap,
+      onDidReceiveBackgroundNotificationResponse: onNotificationActionBackground,
+    );
+
+    final android = _plugin.resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>();
 
     // Tạo channel (Android 8+). Importance high để hiện heads-up.
     const channel = AndroidNotificationChannel(
@@ -34,10 +52,19 @@ class NotificationService {
       description: _channelDesc,
       importance: Importance.high,
     );
-    await _plugin
-        .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>()
-        ?.createNotificationChannel(channel);
+    await android?.createNotificationChannel(channel);
+    await android?.createNotificationChannel(const AndroidNotificationChannel(
+      notePinnedChannelId,
+      'Ghi chú ghim',
+      description: 'Ghi chú được ghim cố định trên thanh thông báo.',
+      importance: Importance.low,
+    ));
+    await android?.createNotificationChannel(const AndroidNotificationChannel(
+      noteReminderChannelId,
+      'Nhắc ghi chú',
+      description: 'Thông báo nhắc ghi chú theo lịch bạn đặt.',
+      importance: Importance.high,
+    ));
 
     _initialized = true;
   }
@@ -82,6 +109,54 @@ class NotificationService {
   Future<void> cancel(int id) async {
     await init();
     await _plugin.cancel(id);
+  }
+
+  /// Hiện notification với [details] tuỳ biến (ghi chú ghim: ongoing + action).
+  Future<void> showWithDetails({
+    required int id,
+    String? title,
+    String? body,
+    required NotificationDetails details,
+    String? payload,
+  }) async {
+    await init();
+    await _plugin.show(id, title, body, details, payload: payload);
+  }
+
+  /// Lập lịch notification với [details] tuỳ biến (nhắc ghi chú).
+  ///
+  /// [matchDateTimeComponents]: null = một lần; `time` = lặp hằng ngày;
+  /// `dayOfWeekAndTime` = lặp hằng tuần đúng thứ.
+  Future<void> zonedScheduleWithDetails({
+    required int id,
+    String? title,
+    String? body,
+    required tz.TZDateTime when,
+    required NotificationDetails details,
+    String? payload,
+    DateTimeComponents? matchDateTimeComponents,
+    AndroidScheduleMode scheduleMode = AndroidScheduleMode.exactAllowWhileIdle,
+  }) async {
+    await init();
+    await _plugin.zonedSchedule(
+      id,
+      title,
+      body,
+      when,
+      details,
+      payload: payload,
+      androidScheduleMode: scheduleMode,
+      uiLocalNotificationDateInterpretation:
+          UILocalNotificationDateInterpretation.absoluteTime,
+      matchDateTimeComponents: matchDateTimeComponents,
+    );
+  }
+
+  /// App có được mở từ một notification không (cold launch) — dùng để điều
+  /// hướng tới màn liên quan (vd ghi chú) ngay khi khởi động.
+  Future<NotificationAppLaunchDetails?> getLaunchDetails() async {
+    await init();
+    return _plugin.getNotificationAppLaunchDetails();
   }
 
   /// Cấu hình hiển thị dùng chung — BigTextStyle để body dài KHÔNG bị cắt

@@ -34,11 +34,11 @@ mobile/
 ├── lib/
 │   ├── main.dart                 # ProviderScope, init timezone (+ setLocalLocation) + AndroidAlarmManager, notif/permission/background, prompt pin lần đầu, lập lịch digest, AppLifecycleListener (resume→refresh), MaterialApp.router
 │   ├── core/
-│   │   ├── app_router.dart        # GoRouter: '/' Weather · '/map' Map&News · '/routes' RouteScreen · '/settings' Settings
+│   │   ├── app_router.dart        # GoRouter: '/' Weather · '/map' Map&News · '/routes' RouteScreen · '/notes' (+/notes/edit) Notes · '/settings' Settings
 │   │   ├── config/app_config.dart # API key (--dart-define) + ngưỡng mưa/pin/chu kỳ
 │   │   ├── di/providers.dart      # DI Riverpod hạ tầng (permission, network, dio, db, notif)
 │   │   ├── theme/                 # theme_palettes · weather_theme · app_theme · theme_controller (cá nhân hóa giao diện)
-│   │   ├── database/app_database.dart  # Drift DB (WeatherCache, FixedRoutePoints) [+ .g.dart]
+│   │   ├── database/app_database.dart  # Drift DB v2 (WeatherCache, FixedRoutePoints, Notes, NoteItems) + MigrationStrategy [+ .g.dart]
 │   │   ├── network/
 │   │   │   ├── api_client.dart     # Dio + interceptor map lỗi → exceptions
 │   │   │   └── network_info.dart   # connectivity_plus → isOnline
@@ -46,8 +46,10 @@ mobile/
 │   │   │   ├── failures.dart        # sealed Failure (Network/Server/Cache/Permission/Unexpected)
 │   │   │   └── exceptions.dart      # exceptions tầng data
 │   │   ├── permissions/permission_service.dart   # geolocator + permission_handler
-│   │   ├── notifications/notification_service.dart # flutter_local_notifications: show (BigText) + scheduleDaily/cancel (zonedSchedule, fallback) + IDs
-│   │   └── background/                        # background_worker (WorkManager 15' + alert) · background_location (resolveBackgroundCoords) · digest_alarm (AlarmManager fetch tươi → bản tin)
+│   │   ├── notifications/
+│   │   │   ├── notification_service.dart          # flutter_local_notifications: 3 channel (weather/note ghim/note nhắc), show/showWithDetails (BigText) + scheduleDaily/zonedScheduleWithDetails/cancel + getLaunchDetails + IDs
+│   │   │   └── notification_response_handler.dart # onNotificationTap (mở /notes) + onNotificationActionBackground (isolate riêng: "Đã đọc" → unpin DB + re-sync lịch)
+│   │   └── background/                        # background_worker (WorkManager 15' + alert + re-assert note ghim) · background_location (resolveBackgroundCoords) · digest_alarm (AlarmManager fetch tươi → bản tin)
 │   ├── shared/
 │   │   ├── utils/error_handler.dart   # extractUserMessage(e)
 │   │   └── widgets/                    # AppErrorWidget, LoadingWidget, PermissionDeniedWidget, AppDrawer (điều hướng)
@@ -57,9 +59,10 @@ mobile/
 │       ├── weather/    # domain(entities, usecases AnalyzeRain/DetectEnvChange/BuildRainOutlook) · data(model mapper, datasources, repo) · presentation(providers, WeatherScreen, widgets)
 │       ├── alerts/     # domain(WeatherAlert, BuildWeatherAlerts, BuildDailyDigest) · data(AlertStateStore, NotificationPrefsStore, digest_scheduler→AlarmManager) · presentation(notificationSettingsProvider)
 │       ├── map_news/   # MODULE 1: NewsItem · RssDataSource (xml) · NewsRepositoryImpl · MapScreen (flutter_map + lớp mưa OWM + tin RSS)
-│       └── fixed_route/# MODULE 2: RoutePoint/Poi · RouteLocalDataSource (Drift) · OverpassDataSource · PoiRepositoryImpl · RouteScreen (flutter_map) · poi_visuals
+│       ├── fixed_route/# MODULE 2: RoutePoint/Poi · RouteLocalDataSource (Drift) · OverpassDataSource · PoiRepositoryImpl · RouteScreen (flutter_map) · poi_visuals
+│       └── notes/      # Ghi chú: domain(Note/NoteItem/NoteRepeat) · data(NoteLocalDataSource Drift, note_notification_service: slot ID + buildReminderSlots + sync ghim/lịch + reassert) · presentation(notesControllerProvider, NotesScreen, NoteEditScreen, note_colors)
 ├── assets/icon/        # app_icon.png (logo) — nguồn sinh launcher icon & splash
-├── test/               # analyze_rain_test · build_weather_alerts_test · weather_condition_test · build_rain_outlook_test
+├── test/               # analyze_rain_test · build_weather_alerts_test · weather_condition_test · build_rain_outlook_test · note_local_datasource_test · note_notification_logic_test
 ├── env.json.example    # mẫu API key (copy → env.json, đã .gitignore)
 └── pubspec.yaml        # + flutter_launcher_icons / flutter_native_splash config (icon/splash từ logo)
 ```

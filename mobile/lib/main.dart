@@ -17,6 +17,8 @@ import 'core/theme/weather_theme.dart';
 import 'features/alerts/data/digest_scheduler.dart';
 import 'features/alerts/data/notification_prefs_store.dart';
 import 'features/location/presentation/providers/location_provider.dart';
+import 'features/notes/data/note_notification_service.dart';
+import 'features/notes/presentation/providers/notes_provider.dart';
 import 'features/weather/presentation/providers/weather_provider.dart';
 
 Future<void> main() async {
@@ -65,6 +67,9 @@ class _KatoCastAppState extends ConsumerState<KatoCastApp> {
       onResume: () {
         ref.invalidate(weatherProvider);
         ref.invalidate(currentPlaceProvider);
+        // Ghi chú: nút "Đã đọc" chạy ở isolate riêng ghi thẳng DB — main
+        // isolate không tự thấy → nạp lại khi quay về app.
+        ref.invalidate(notesControllerProvider);
       },
     );
   }
@@ -96,6 +101,27 @@ class _KatoCastAppState extends ConsumerState<KatoCastApp> {
     //    WorkManager). Nội dung lấy từ cache mới nhất; mỗi lần worker chạy /
     //    đổi cài đặt sẽ lập lịch lại để nội dung tươi nhất có thể.
     await _rescheduleDigests();
+
+    // 4. Ghi chú: hiện lại notification ghim (mất sau reboot / "Xoá tất cả"
+    //    trên Android 14) + lập lại lịch nhắc theo trạng thái DB — đồng bộ cả
+    //    khi "Đã đọc" được bấm lúc app tắt.
+    try {
+      await reassertNoteNotifications(
+        ref.read(appDatabaseProvider),
+        ref.read(notificationServiceProvider),
+      );
+    } catch (_) {}
+
+    // 5. App được mở từ notification ghi chú (cold launch) → vào màn Ghi chú.
+    try {
+      final launch =
+          await ref.read(notificationServiceProvider).getLaunchDetails();
+      final resp = launch?.notificationResponse;
+      if ((launch?.didNotificationLaunchApp ?? false) &&
+          parseNotePayload(resp?.payload) != null) {
+        appRouter.push('/notes');
+      }
+    } catch (_) {}
   }
 
   Future<void> _promptBatteryOnce() async {

@@ -65,6 +65,7 @@
 | Bản tin thời tiết hằng ngày (digest) | ✅ | — | `features/alerts/*` (BuildDailyDigest, NotificationPrefsStore, notificationSettingsProvider, **digest_scheduler**) + `core/background/digest_alarm` + `weather/.../build_rain_outlook` | Tự gửi tóm tắt vào khung giờ cố định (mặc định 6h30 & 16h30) qua **`android_alarm_manager_plus`** (`periodic` exact+wakeup+allowWhileIdle+rescheduleOnReboot); tại mốc giờ `digestAlarmCallback` **fetch dữ liệu tươi rồi mới hiển thị** (sửa lỗi zonedSchedule bake text cũ). Nội dung có **outlook mưa cả ngày theo buổi** (`BuildRainOutlook`: 4 buổi Đêm/Sáng/Chiều/Tối phủ đủ 0–24h, **tách từng đợt mưa không liên tục**, >2 đợt → "rải rác nhiều đợt") + gợi ý mưa tức thời (giờ từ `changeAt`) + hi/lo + UV |
 | Module 1 — Map & News | ✅ | — | `features/map_news/*` | bản đồ OSM (flutter_map) + lớp mưa OWM; tin tức RSS thời tiết (`MapScreen`, `/map`) |
 | Module 2 — Fixed Route POI | ✅ | — | `features/fixed_route/*` | lưu lộ trình (Drift) + quét POI dọc đường qua Overpass/OSM (`RouteScreen`, `/routes`) |
+| Ghi chú (notes) | ✅ | — | `features/notes/*` + `core/notifications/notification_response_handler.dart` | Note text/checklist, màu, tìm kiếm, khu "Đã xong"; **ghim sticky** lên thanh thông báo (`ongoing`, sống qua "Xoá tất cả", chỉ gỡ bằng nút **"Đã đọc"** — note giữ nguyên trong app); **hẹn nhắc** một lần/hằng ngày/hằng tuần theo thứ (`zonedSchedule` exact, sống qua reboot); re-assert ghim ở bootstrap + worker 15'; ID scheme `10000 + noteId*16 + slot` (`NotesScreen` `/notes`) |
 
 > Status: 📋 planned · 🚧 in progress · ✅ done
 
@@ -90,6 +91,10 @@
 |-------|-------|---------------|
 | `weather_cache` | Cache JSON One Call theo `locationKey` (lat,lng làm tròn) + `fetchedAt` | PK = locationKey |
 | `fixed_route_points` | Điểm lộ trình cố định (routeId, lat, lng, seq, label) | gom theo `routeId` |
+| `notes` | Ghi chú (title, body, colorIndex, pinned, done, remindAt, repeat, weekdaysMask, createdAt/updatedAt) | 1—n `note_items` |
+| `note_items` | Mục checklist (noteId, content, done, seq) | thuộc `notes` qua noteId |
+
+> schemaVersion = **2** (v1→v2 thêm notes/note_items qua `MigrationStrategy.onUpgrade`).
 
 ## 6. Shared Utilities
 
@@ -119,7 +124,9 @@
 - `mobile/lib/core/background/digest_alarm.dart` (callback alarm: fetch tươi → hiển thị bản tin)
 - `mobile/lib/core/background/background_location.dart` (resolveBackgroundCoords cho isolate nền)
 - `mobile/lib/features/alerts/data/notification_prefs_store.dart` (cài đặt bản tin)
-- `mobile/lib/core/notifications/notification_service.dart` (show + scheduleDaily/cancel, BigText)
+- `mobile/lib/core/notifications/notification_service.dart` (3 channel, show/zonedSchedule + details tuỳ biến, BigText)
+- `mobile/lib/core/notifications/notification_response_handler.dart` (tap → /notes; action "Đã đọc" chạy isolate nền)
+- `mobile/lib/features/notes/data/note_notification_service.dart` (ID slot + buildReminderSlots + sync ghim/lịch + reassert)
 - `mobile/lib/core/theme/theme_controller.dart` (cài đặt giao diện + precedence seed)
 - `mobile/lib/features/settings/presentation/settings_screen.dart` (màn Settings + guide pin)
 

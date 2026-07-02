@@ -5,6 +5,7 @@ import '../../features/alerts/data/alert_state_store.dart';
 import '../../features/alerts/data/digest_scheduler.dart';
 import '../../features/alerts/data/notification_prefs_store.dart';
 import '../../features/alerts/domain/usecases/build_weather_alerts.dart';
+import '../../features/notes/data/note_notification_service.dart';
 import '../../features/weather/data/datasources/weather_local_datasource.dart';
 import '../../features/weather/data/datasources/weather_remote_datasource.dart';
 import '../../features/weather/data/repositories/weather_repository_impl.dart';
@@ -50,6 +51,12 @@ class BackgroundScheduler {
 void callbackDispatcher() {
   Workmanager().executeTask((task, inputData) async {
     if (task != kWeatherCheckTask) return true;
+    // Ghi chú ghim: re-assert TRƯỚC (try riêng, DB riêng) — hồi phục sau
+    // reboot/"Xoá tất cả" kể cả khi không có vị trí (guard coords của weather
+    // không được chặn bước này).
+    try {
+      await _reassertNotes();
+    } catch (_) {}
     try {
       await _runWeatherCheck();
     } catch (_) {
@@ -57,6 +64,15 @@ void callbackDispatcher() {
     }
     return true;
   });
+}
+
+Future<void> _reassertNotes() async {
+  final db = AppDatabase();
+  try {
+    await reassertNoteNotifications(db, NotificationService());
+  } finally {
+    await db.close();
+  }
 }
 
 Future<void> _runWeatherCheck() async {

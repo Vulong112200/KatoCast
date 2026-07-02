@@ -39,6 +39,8 @@ class AppDrawer extends StatelessWidget {
               'Bản đồ & Tin tức'),
           _item(context, current, '/routes', Icons.alt_route,
               'Lộ trình & tiện ích'),
+          _item(context, current, '/notes', Icons.sticky_note_2_outlined,
+              'Ghi chú'),
           const Divider(),
           _item(context, current, '/settings', Icons.settings_outlined,
               'Cài đặt'),

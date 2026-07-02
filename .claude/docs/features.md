@@ -66,16 +66,24 @@
 - **Mobile:** entities `RoutePoint`, `Poi` · `RouteLocalDataSource` (Drift CRUD) · `OverpassDataSource` (Dio riêng → Overpass QL) · `PoiRepositoryImpl` · providers `routeLocalDataSourceProvider`, `overpassDataSourceProvider`, `poiRepositoryProvider`, `routeControllerProvider` (StateNotifier) · `RouteScreen` (`/routes`, flutter_map) · widget `poi_visuals` (icon/màu/nhãn theo PoiType)
 - **Key logic:** chạm bản đồ / "Thêm vị trí" → lưu `RoutePoint` (Drift, routeId `default`). `scanPoisAlongRoute`: Overpass QL `around:radius` cho mỗi (điểm × loại), `out center` (bắt cả node & way); map tag OSM (`amenity=restaurant/fuel/cafe`, `shop=supermarket`) → `PoiType`; khử trùng theo toạ độ làm tròn + loại; `distanceToRouteMeters` = khoảng cách tới điểm lộ trình gần nhất (`Geolocator.distanceBetween`); lọc trong bán kính, sắp xếp theo độ gần. **Chịu lỗi mạng:** `OverpassDataSource` thử lần lượt nhiều mirror (`AppConfig.overpassEndpoints`) + gửi `User-Agent`; hết mirror/response sai shape → ném `ServerException`, controller hiển thị qua `extractUserMessage` (không nuốt lỗi). `RouteState.scanned` phân biệt "chưa quét" với "quét xong nhưng rỗng".
 
+### Ghi chú (notes)
+- **Status:** ✅ done
+- **Backend:** — (client-only, Drift + notification cục bộ)
+- **Mobile:** entities `Note`/`NoteItem`/`NoteRepeat` (`features/notes/domain`) · `NoteLocalDataSource` (Drift CRUD, transaction cho items/delete) · `note_notification_service.dart` (hằng/hàm thuần: `noteSlotId`, `buildReminderSlots`, `buildPinnedBody`, `notePayload`; class `NoteNotificationService.sync/cancelAll/syncReminders/showPinned`; `reassertNoteNotifications`) · `core/notifications/notification_response_handler.dart` (tap + action nền) · providers `noteLocalDataSourceProvider`, `noteNotificationServiceProvider`, `notesControllerProvider` · screens `NotesScreen` (`/notes`), `NoteEditScreen` (`/notes/edit`) · widget `note_colors`
+- **Key logic:** Note = text (+ checklist tick trong app, màu, tìm kiếm in-memory, khu "Đã xong"). **Ghim sticky:** notification `ongoing + autoCancel:false + onlyAlertOnce` trên channel riêng `note_pinned` (Importance.low — im lặng), sống qua "Xoá tất cả"; chỉ gỡ qua nút action **"Đã đọc"** (`cancelNotification: true, showsUserInterface: false` — cần `ActionBroadcastReceiver` trong AndroidManifest) → handler nền (isolate riêng, tự init tz + `AppDatabase()`) set `pinned=false` **note giữ nguyên trong app**; Android 14 vuốt gỡ được ongoing → **re-assert** ở `main._bootstrap` + đầu chu kỳ WorkManager 15' (`_reassertNotes`, chạy TRƯỚC weather check nên không bị guard vị trí chặn). **Hẹn nhắc:** `zonedSchedule` exact (fallback inexact khi bị thu hồi quyền) — một lần (slot 8, không lập nếu quá khứ) / hằng ngày (slot 8 + `DateTimeComponents.time`) / hằng tuần theo thứ (slot 1..7 + `dayOfWeekAndTime`, mỗi thứ một lịch); note đang ghim → bản nhắc cũng sticky + có "Đã đọc"; **"Đã đọc" không giết alarm lặp** (chỉ cancel slot 0 + re-sync 1..8 — `plugin.cancel` Dart mới huỷ alarm). **ID scheme:** `10000 + noteId*16 + slot` (0=ghim, 1..7=thứ, 8=ngày/một lần) — không đụng dải weather 1001–1006. **Mọi mutation qua phễu `sync()`** (cancelAll 9 slot → dựng lại) tránh sticky bị "bake" vào lịch cũ. Main isolate không thấy write từ isolate action → `ref.invalidate(notesControllerProvider)` khi resume. DB v2 (`MigrationStrategy` v1→v2, row class `NoteRow`/`NoteItemRow` qua `@DataClassName`).
+
 ---
 
 ## Database Tables Status
 
-> DB cục bộ Drift (`mobile/lib/core/database/app_database.dart`), schemaVersion = 1.
+> DB cục bộ Drift (`mobile/lib/core/database/app_database.dart`), schemaVersion = **2** (có `MigrationStrategy` tường minh).
 
 | Table | Status | Migration | Ghi chú |
 |-------|--------|-----------|---------|
 | `weather_cache` | ✅ | Drift v1 | cache JSON One Call theo locationKey |
 | `fixed_route_points` | ✅ | Drift v1 | lộ trình cố định (Module 2) |
+| `notes` | ✅ | Drift v2 | ghi chú (row class `NoteRow`); pinned/done/remindAt/repeat/weekdaysMask |
+| `note_items` | ✅ | Drift v2 | checklist của note (row class `NoteItemRow`), gom theo noteId + seq |
 
 ---
 
@@ -89,6 +97,7 @@
 | `themeControllerProvider` | StateNotifierProvider | theme | SharedPreferences; UI Settings + `main.dart` |
 | `notificationSettingsProvider` | StateNotifierProvider | alerts (digest) | `NotificationPrefsStore` (SharedPreferences); UI Settings |
 | `routeControllerProvider` | StateNotifierProvider | fixed_route | `poiRepositoryProvider` (Drift + Overpass) |
+| `notesControllerProvider` | StateNotifierProvider | notes | `noteLocalDataSourceProvider` (Drift) + `noteNotificationServiceProvider` |
 | `poiRepositoryProvider` | Provider (DI) | fixed_route | `routeLocalDataSourceProvider` + `overpassDataSourceProvider` |
 | `newsProvider` | FutureProvider | map_news | `currentLocationProvider` + `newsRepositoryProvider` (RSS) |
 | `weatherProvider` | FutureProvider | weather | `currentLocationProvider` + `weatherRepositoryProvider` |
