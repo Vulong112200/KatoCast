@@ -27,6 +27,11 @@ class RainStatus {
   /// null nếu không áp dụng.
   final int? minutesUntilChange;
 
+  /// Thời điểm TUYỆT ĐỐI cơn mưa SẮP TỚI dự kiến tạnh (chỉ có nghĩa với
+  /// rainStartingSoon — trả lời "mưa kéo dài đến bao giờ"). null nếu không
+  /// xác định được (cơn mưa kéo dài quá tầm dự báo ngắn hoặc không áp dụng).
+  final DateTime? rainEndsAt;
+
   /// Nguồn dữ liệu suy ra: minutely (chính xác) hay hourly (fallback).
   final bool fromMinutely;
 
@@ -39,6 +44,7 @@ class RainStatus {
     required this.phase,
     this.changeAt,
     this.minutesUntilChange,
+    this.rainEndsAt,
     required this.fromMinutely,
     this.probabilityPct,
   });
@@ -47,13 +53,25 @@ class RainStatus {
       : phase = RainPhase.dry,
         changeAt = null,
         minutesUntilChange = null,
+        rainEndsAt = null,
         probabilityPct = null;
 
   const RainStatus.raining({this.fromMinutely = true, this.probabilityPct})
       : phase = RainPhase.raining,
         changeAt = null,
-        minutesUntilChange = null;
+        minutesUntilChange = null,
+        rainEndsAt = null;
 
   bool get isRainingNow =>
       phase == RainPhase.raining || phase == RainPhase.rainStoppingSoon;
+
+  /// Thời lượng (phút) của cơn mưa sắp tới = [rainEndsAt] − [changeAt].
+  /// null nếu thiếu một trong hai mốc. Chỉ có nghĩa với rainStartingSoon.
+  int? get durationMinutes {
+    final start = changeAt;
+    final end = rainEndsAt;
+    if (start == null || end == null) return null;
+    final m = end.difference(start).inMinutes;
+    return m > 0 ? m : null;
+  }
 }

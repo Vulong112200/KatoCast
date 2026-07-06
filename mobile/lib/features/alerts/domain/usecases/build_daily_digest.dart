@@ -1,5 +1,5 @@
-import '../../../../core/config/app_config.dart';
 import '../../../weather/domain/entities/rain_status.dart';
+import '../../../weather/domain/entities/uv_advice.dart';
 import '../../../weather/domain/entities/weather.dart';
 import '../../../weather/domain/entities/weather_condition.dart';
 import '../../../weather/domain/usecases/analyze_rain.dart';
@@ -19,7 +19,9 @@ class DailyDigest {
 class BuildDailyDigest {
   const BuildDailyDigest();
 
-  DailyDigest call(WeatherData data) {
+  /// [now] tùy chọn (mặc định thời điểm hiện tại) — để test tất định; được
+  /// luồng xuống `AnalyzeRain`/`BuildRainOutlook` cho khớp mốc thời gian.
+  DailyDigest call(WeatherData data, {DateTime? now}) {
     final c = data.current;
     final condition = WeatherCondition.classify(
       c.conditionId,
@@ -51,18 +53,18 @@ class BuildDailyDigest {
     }
 
     // Tổng quan mưa CẢ NGÀY theo buổi (trả lời "hôm nay có mưa không, mấy giờ").
-    final outlook = const BuildRainOutlook().call(data);
+    final outlook = const BuildRainOutlook().call(data, now: now);
     if (outlook != null) parts.add(outlook);
 
     // Gợi ý mưa TỨC THỜI (đang/sắp mưa trong ~2h tới) — bổ sung cho outlook.
-    final rain = const AnalyzeRain().call(data);
+    final rain = const AnalyzeRain().call(data, now: now);
     final rainHint = _rainHint(rain);
     if (rainHint != null) parts.add(rainHint);
 
-    // Nhắc chống nắng khi UV cao.
-    if (c.uvi >= AppConfig.digestUvWarnThreshold) {
-      parts.add('Chỉ số UV cao (${c.uvi.round()}) — nhớ chống nắng khi ra ngoài.');
-    }
+    // Chỉ số UV kèm lời khuyên theo mức (luôn hiển thị để người dùng hiểu ý
+    // nghĩa từng mức UV, không chỉ khi cao).
+    final uv = UvAdvice.classify(c.uvi);
+    parts.add('UV ${uv.level} — ${uv.label}: ${uv.advice}');
 
     // Mốc thời gian dữ liệu được lấy — cho người dùng biết độ tươi của bản tin.
     parts.add('Cập nhật lúc ${_clock(data.fetchedAt)}.');
@@ -79,9 +81,11 @@ class BuildDailyDigest {
     switch (rain.phase) {
       case RainPhase.rainStartingSoon:
         final n = rain.minutesUntilChange;
+        final end = rain.rainEndsAt;
+        final until = end != null ? ' kéo dài đến khoảng ${_clock(end)}' : '';
         return at != null && n != null
-            ? 'Dự kiến mưa lúc ${_clock(at)} (khoảng $n phút tới)$chance.'
-            : 'Sắp có mưa$chance.';
+            ? 'Dự kiến mưa lúc ${_clock(at)} (khoảng $n phút tới)$chance$until.'
+            : 'Sắp có mưa$chance$until.';
       case RainPhase.raining:
         return 'Hiện đang có mưa$chance.';
       case RainPhase.rainStoppingSoon:

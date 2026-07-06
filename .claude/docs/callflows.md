@@ -62,10 +62,11 @@ weatherProvider (StreamProvider — stale-while-revalidate)
    ▼  (currentLocation ưu tiên last-known → mở app nhanh; AppLifecycleListener resume→invalidate)
 WeatherMapper.fromOneCallJson → WeatherData (AsyncValue)
    ▼
-UI: AppErrorWidget / PermissionDeniedWidget khi lỗi; data → CurrentCard + HourlyList
-   + rainStatusProvider (AnalyzeRain, kèm probabilityPct) → RainAlertBanner
+UI: AppErrorWidget / PermissionDeniedWidget khi lỗi; data → CurrentCard (UV+band, mây, hi/lo) + HourlyList
+   + rainStatusProvider (AnalyzeRain: probabilityPct + rainEndsAt) → RainAlertBanner
+   + BuildAdvisories → AdvisoryCard "Lưu ý hôm nay" (tình hình + UV + ẩm + gió + mưa)
    + connectivityStatusProvider → badge "dữ liệu cũ" (offline thật vs đang làm mới)
-   + currentPlaceProvider (reverse geocoding) → tên địa danh trên AppBar
+   + currentPlaceProvider → getPlace (Nominatim OSM ưu tiên → fallback plugin geocoding) → AppBar (shortLabel) + header thân màn hình (fullLabel đầy đủ: đường→phường→quận→tỉnh, không cắt)
 ```
 
 ### 3. Chọn / áp dụng theme
@@ -94,37 +95,53 @@ MapScreen → flutter_map (tile OSM + lớp mưa OWM) center theo currentLocatio
    ▼ ListView tin; tap → url_launcher mở trình duyệt
 ```
 
-### 2. Thông báo thông minh (background — WorkManager)
+### 2. Thông báo thông minh (background — CHỈ 1 lớp → LÕI runWeatherCheck)
 ```
-WorkManager periodic 15' → callbackDispatcher (isolate riêng, tự dựng DI)
+applyBackgroundTriggers() [main._bootstrap + backgroundSettingsProvider khi đổi cài đặt]:
+   ▼ đọc BackgroundPrefsStore.foregroundEnabled
+   ├─ BẬT  → startWeatherForegroundService; cancelWeatherAlarm + BackgroundScheduler.cancel
+   │          (foreground_service là LỚP DUY NHẤT — tránh 3 lớp cùng đá máy → CHỐNG NÓNG)
+   └─ TẮT  → stopWeatherForegroundService; BackgroundScheduler.initialize + scheduleWeatherAlarm
+LỚP ĐANG HOẠT ĐỘNG gọi runWeatherCheck (isolate riêng tự dựng DI):
+  • foreground_service: onRepeatEvent mỗi intervalMinutes (5/10/15/30' từ prefs),
+      allowWakeLock (allowWifiLock=false) → sống trong Doze
+  • weather_alarm: oneShotAt exact+allowWhileIdle, re-arm theo chu kỳ CHỈ khi FG tắt
+  • WorkManager periodic (clamp ≥15'): backstop khi FG tắt
    ▼
-resolveBackgroundCoords (last-known ≤24h / fallback LastLocationStore)
-   ▼  (null → bỏ lần này; không còn chặn cứng 3h → fetch được qua đêm)
-WeatherRepository.getWeather(forceRefresh)
-   ▼  (data.age > 45' — cache cũ do fetch fail → BỎ sinh cảnh báo, nhảy tới bước lập lịch digest)
-AnalyzeRain(now) [lọc điểm quá khứ, trả changeAt + phút-từ-now] + DetectEnvChange
+runWeatherCheck (core/background/weather_check.dart):
+   resolveBackgroundCoords (last-known ≤24h / fallback LastLocationStore) → null → dừng
+   ▼  GUARD QUOTA bám chu kỳ: getCachedWeather → cache tươi hơn (intervalMinutes−1') → DÙNG CACHE,
+   │  KHÔNG gọi API; ngược lại getWeather (luôn gọi remote khi online)
+   ▼  (data.age > 45' → BỎ sinh cảnh báo, nhảy tới bước lập lịch digest)
+AnalyzeRain(now) [changeAt + rainEndsAt/duration + probabilityPct] + DetectEnvChange
    ▼
 BuildWeatherAlerts(rain, env, previousPhase + previousChangeAt từ AlertStateStore)
-   │ chỉ sinh alert khi PHA đổi (chống spam);
-   │ NGOẠI LỆ: pha giữ nguyên nhưng changeAt lệch ≥15' → alert "Cập nhật:" (cùng ID)
-   │ giờ HH:MM format từ changeAt (không cộng phút vào now → hết drift)
+   │ chỉ sinh alert khi PHA đổi; NGOẠI LỆ: changeAt lệch ≥15' → "Cập nhật:" (cùng ID)
+   │ nội dung mưa: giờ bắt đầu (HH:MM từ changeAt) + % + giờ tạnh/thời lượng (rainEndsAt)
    ▼
-NotificationService.show(id cố định theo loại) → AlertStateStore.write(phase + changeAt mới)
-   ▼ (cùng lần chạy, kênh độc lập)
-NotificationPrefsStore.read() → scheduleDigests(prefs)  [chỉ lập/huỷ lịch, KHÔNG bake nội dung]
+NotificationService.show(id cố định) → AlertStateStore.write(phase + changeAt mới)
+   ▼ (foreground service còn updateService: thông báo thường trực live nhiệt độ + tình hình)
+NotificationPrefsStore.read() → scheduleDigests(prefs)  [re-arm mọi mốc digest mỗi chu kỳ]
 ```
 
-### 2b. Bản tin hằng ngày — alarm FETCH TƯƠI tại thời điểm bắn
+### 2b. Bản tin hằng ngày — NHIỀU MỐC + alarm FETCH TƯƠI tại thời điểm bắn
 ```
+DigestSettingsCard (màn Weather) → notificationSettingsProvider.addTime/removeTime/updateTime
+   ▼ (ghi NotificationPrefsStore.setTimes; nếu thiếu quyền exact → nút xin requestExactAlarmPermission)
 scheduleDigests(prefs) được gọi để lịch khớp cài đặt (không cần WeatherData):
-  • main `_bootstrap` (mở app)                       ┐
-  • NotificationSettingsController (đổi enabled/giờ) ├─▶ AndroidAlarmManager.periodic
-  • background_worker._runWeatherCheck               ┘     (id morning/evening; exact+wakeup+allowWhileIdle+rescheduleOnReboot)
-   ▼  enabled=false → AndroidAlarmManager.cancel cả 2 id
+  • main `_bootstrap` (mở app)                        ┐
+  • NotificationSettingsController (đổi enabled/mốc)  ├─▶ hủy toàn dải (digestBase..+maxSlots) rồi
+  • runWeatherCheck (mỗi chu kỳ → tự chữa chuỗi)      ┘   for i,minutes: scheduleDigestSlot(digestBase+i)
+   ▼  enabled=false → hủy toàn dải, dừng                    ▼ canScheduleExactAlarms?
+   ▼  DÙNG oneShotAt, KHÔNG periodic (setRepeating         ├─ có → exact:true
+   │  bị Doze hoãn → bản tin SÁNG không nổ)                └─ KHÔNG → exact:false (inexact, VẪN nổ
+   ▼                                                            gần đúng — không SecurityException im lặng)
 Đến mốc giờ → AlarmManager đánh thức isolate → digestAlarmCallback(id):
-   resolveBackgroundCoords → getWeather(forceRefresh) → BuildDailyDigest
-   (gồm BuildRainOutlook: quét hourly cả ngày → mưa theo buổi)
-   → NotificationService.show(id)   ← DỮ LIỆU TƯƠI, không phải text lập lịch sẵn
+   index = id − digestBase → resolveBackgroundCoords → getWeather → BuildDailyDigest
+   (BuildRainOutlook mưa theo buổi + UvAdvice lời khuyên UV theo mức)
+   → NotificationService.show(id)   ← DỮ LIỆU TƯƠI
+   → RE-ARM: scheduleDigestSlot(id, times[index]) cho NGÀY MAI (vẫn re-arm khi thiếu vị trí/offline;
+     KHÔNG re-arm nếu index đã bị xóa hoặc !enabled)
 ```
 
 ### 6. Ghi chú — ghim sticky & nút "Đã đọc"

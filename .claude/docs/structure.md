@@ -32,10 +32,10 @@ backend/
 ```
 mobile/
 ├── lib/
-│   ├── main.dart                 # ProviderScope, init timezone (+ setLocalLocation) + AndroidAlarmManager, notif/permission/background, prompt pin lần đầu, lập lịch digest, AppLifecycleListener (resume→refresh), MaterialApp.router
+│   ├── main.dart                 # ProviderScope, init timezone + AndroidAlarmManager, notif/permission, khởi động nền qua applyBackgroundTriggers (CHỈ 1 lớp: FG service khi bật, hoặc alarm exact + WorkManager khi tắt), nhắc pin lặp 7 ngày, lập lịch digest, AppLifecycleListener (resume→refresh), MaterialApp.router
 │   ├── core/
 │   │   ├── app_router.dart        # GoRouter: '/' Weather · '/map' Map&News · '/routes' RouteScreen · '/notes' (+/notes/edit) Notes · '/settings' Settings
-│   │   ├── config/app_config.dart # API key (--dart-define) + ngưỡng mưa/pin/chu kỳ
+│   │   ├── config/app_config.dart # API key (--dart-define) + ngưỡng mưa/pin/chu kỳ (backgroundIntervalOptions 5/10/15/30) + digestDefaultTimes + digestMaxSlots
 │   │   ├── di/providers.dart      # DI Riverpod hạ tầng (permission, network, dio, db, notif)
 │   │   ├── theme/                 # theme_palettes · weather_theme · app_theme · theme_controller (cá nhân hóa giao diện)
 │   │   ├── database/app_database.dart  # Drift DB v2 (WeatherCache, FixedRoutePoints, Notes, NoteItems) + MigrationStrategy [+ .g.dart]
@@ -45,24 +45,24 @@ mobile/
 │   │   ├── error/
 │   │   │   ├── failures.dart        # sealed Failure (Network/Server/Cache/Permission/Unexpected)
 │   │   │   └── exceptions.dart      # exceptions tầng data
-│   │   ├── permissions/permission_service.dart   # geolocator + permission_handler
+│   │   ├── permissions/permission_service.dart   # geolocator + permission_handler (vị trí/thông báo/pin + isExactAlarmGranted/requestExactAlarmPermission)
 │   │   ├── notifications/
 │   │   │   ├── notification_service.dart          # flutter_local_notifications: 3 channel (weather/note ghim/note nhắc), show/showWithDetails (BigText) + scheduleDaily/zonedScheduleWithDetails/cancel + getLaunchDetails + IDs
 │   │   │   └── notification_response_handler.dart # onNotificationTap (mở /notes) + onNotificationActionBackground (isolate riêng: "Đã đọc" → unpin DB + re-sync lịch)
-│   │   └── background/                        # background_worker (WorkManager 15' + alert + re-assert note ghim) · background_location (resolveBackgroundCoords) · digest_alarm (AlarmManager fetch tươi → bản tin)
+│   │   └── background/                        # background_triggers (applyBackgroundTriggers: đảm bảo CHỈ 1 lớp drive runWeatherCheck — FG khi bật thì hủy alarm+WorkManager, ngược lại) · weather_check (LÕI runWeatherCheck + guard quota bám theo chu kỳ prefs) · foreground_service (flutter_foreground_task, chu kỳ đọc từ prefs, allowWifiLock=false) · weather_alarm (alarm exact dự phòng, chỉ khi FG tắt, re-arm theo chu kỳ) · background_worker (WorkManager backstop, clamp ≥15', có cancel()) · background_prefs (bật/tắt FG + intervalMinutes 5/10/15/30) · background_location (resolveBackgroundCoords) · digest_alarm (AlarmManager oneShotAt fetch tươi → bản tin, re-arm theo index mốc)
 │   ├── shared/
 │   │   ├── utils/error_handler.dart   # extractUserMessage(e)
 │   │   └── widgets/                    # AppErrorWidget, LoadingWidget, PermissionDeniedWidget, AppDrawer (điều hướng)
 │   └── features/
-│       ├── location/   # domain(Coordinates, Place, repo) · data(datasource geolocator+geocoding, repo impl, LastLocationStore) · presentation(providers: current/stream/place)
-│       ├── settings/   # presentation(SettingsScreen): chọn theme/bảng màu/Material You/đổi-màu-theo-thời-tiết + quyền thông báo + guide pin
-│       ├── weather/    # domain(entities, usecases AnalyzeRain/DetectEnvChange/BuildRainOutlook) · data(model mapper, datasources, repo) · presentation(providers, WeatherScreen, widgets)
-│       ├── alerts/     # domain(WeatherAlert, BuildWeatherAlerts, BuildDailyDigest) · data(AlertStateStore, NotificationPrefsStore, digest_scheduler→AlarmManager) · presentation(notificationSettingsProvider)
+│       ├── location/   # domain(Coordinates, Place +thoroughfare, repo) · data(datasource geolocator+geocoding, nominatim_datasource reverse OSM, repo impl ưu tiên Nominatim→fallback plugin, LastLocationStore) · presentation(providers: current/stream/place/nominatimDS)
+│       ├── settings/   # presentation(SettingsScreen + providers/background_settings_provider: state BackgroundSettings {foregroundEnabled, intervalMinutes}): theme/bảng màu/Material You/đổi-màu + quyền thông báo + công tắc theo-dõi-liên-tục (FG) + bộ chọn chu kỳ 5/10/15/30' (_IntervalSetting) + guide pin (phần cài đặt bản tin ĐÃ chuyển sang màn Weather)
+│       ├── weather/    # domain(entities +UvAdvice, usecases AnalyzeRain +rainEndsAt / DetectEnvChange / BuildRainOutlook / BuildAdvisories) · data(model mapper, datasources, repo) · presentation(providers, WeatherScreen +header địa điểm đầy đủ, widgets: current_card +UV/mây/hi-lo, advisory_card "Lưu ý hôm nay", digest_settings_card "Bản tin hằng ngày" (nhiều mốc giờ tùy ý + cảnh báo quyền exact-alarm + gửi thử), condition/hourly/rain_banner)
+│       ├── alerts/     # domain(WeatherAlert, BuildWeatherAlerts +giờ tạnh/thời lượng, BuildDailyDigest +UV band, nhận now) · data(AlertStateStore, NotificationPrefsStore: DigestPrefs {enabled, List<int> times} + migrate key cũ, digest_scheduler→AlarmManager oneShotAt dải ID động + fallback inexact) · presentation(notificationSettingsProvider: addTime/removeTime/updateTime)
 │       ├── map_news/   # MODULE 1: NewsItem · RssDataSource (xml) · NewsRepositoryImpl · MapScreen (flutter_map + lớp mưa OWM + tin RSS)
 │       ├── fixed_route/# MODULE 2: RoutePoint/Poi · RouteLocalDataSource (Drift) · OverpassDataSource · PoiRepositoryImpl · RouteScreen (flutter_map) · poi_visuals
 │       └── notes/      # Ghi chú: domain(Note/NoteItem/NoteRepeat) · data(NoteLocalDataSource Drift, note_notification_service: slot ID + buildReminderSlots + sync ghim/lịch + reassert) · presentation(notesControllerProvider, NotesScreen, NoteEditScreen, note_colors)
 ├── assets/icon/        # app_icon.png (logo) — nguồn sinh launcher icon & splash
-├── test/               # analyze_rain_test · build_weather_alerts_test · weather_condition_test · build_rain_outlook_test · note_local_datasource_test · note_notification_logic_test
+├── test/               # analyze_rain_test (+rainEndsAt/duration) · uv_advice_test · build_weather_alerts_test · weather_condition_test · build_rain_outlook_test · build_daily_digest_test · build_advisories_test · detect_env_change_test · digest_prefs_test (normalize/migrate/ánh xạ alarm ID) · note_local_datasource_test · note_notification_logic_test · fixtures/fake_weather (kịch bản dữ liệu giả)
 ├── env.json.example    # mẫu API key (copy → env.json, đã .gitignore)
 └── pubspec.yaml        # + flutter_launcher_icons / flutter_native_splash config (icon/splash từ logo)
 ```

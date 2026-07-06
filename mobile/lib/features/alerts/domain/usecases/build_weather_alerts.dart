@@ -112,9 +112,20 @@ class BuildWeatherAlerts {
         id: NotificationIds.rainStart,
         title: 'Sắp mưa tại khu vực của bạn',
         body: 'Dự kiến mưa ${_timingPhrase(rain, ref)} tại vị trí của '
-            'bạn.${_chanceSuffix(rain.probabilityPct)} '
+            'bạn.${_chanceSuffix(rain.probabilityPct)}'
+            '${_durationSuffix(rain)} '
             'Hãy chuẩn bị áo mưa và chú ý đường trơn trượt.',
       );
+
+  /// Hậu tố mô tả cơn mưa kéo dài đến bao giờ: " Dự kiến kéo dài đến khoảng
+  /// HH:MM (~N phút)." Rỗng nếu không xác định được giờ tạnh.
+  String _durationSuffix(RainStatus rain) {
+    final end = rain.rainEndsAt;
+    if (end == null) return '';
+    final dur = rain.durationMinutes;
+    final durText = dur != null ? ' (~$dur phút)' : '';
+    return ' Dự kiến kéo dài đến khoảng ${_clock(end)}$durText.';
+  }
 
   WeatherAlert _rainStopAlert(RainStatus rain, DateTime ref) => WeatherAlert(
         id: NotificationIds.rainStop,

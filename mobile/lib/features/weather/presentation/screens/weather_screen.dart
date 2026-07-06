@@ -1,18 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../core/background/background_worker.dart';
 import '../../../../core/di/providers.dart';
 import '../../../../core/error/failures.dart';
 import '../../../../shared/widgets/app_drawer.dart';
 import '../../../../shared/widgets/app_error_widget.dart';
 import '../../../../shared/widgets/loading_widget.dart';
 import '../../../../shared/widgets/permission_denied_widget.dart';
+import '../../../location/domain/entities/place.dart';
 import '../../../location/presentation/providers/location_provider.dart';
 import '../../data/repositories/weather_repository_impl.dart';
+import '../../domain/usecases/build_advisories.dart';
 import '../providers/weather_provider.dart';
+import '../widgets/advisory_card.dart';
 import '../widgets/condition_card.dart';
 import '../widgets/current_card.dart';
+import '../widgets/digest_settings_card.dart';
 import '../widgets/hourly_list.dart';
 import '../widgets/rain_alert_banner.dart';
 
@@ -60,12 +63,6 @@ class WeatherScreen extends ConsumerWidget {
             icon: const Icon(Icons.refresh),
             onPressed: () => _refresh(ref),
           ),
-          // Debug: chạy background check ngay để test notification.
-          IconButton(
-            tooltip: 'Test thông báo',
-            icon: const Icon(Icons.notifications_active_outlined),
-            onPressed: () => BackgroundScheduler.runOnceNow(),
-          ),
         ],
       ),
       body: RefreshIndicator(
@@ -80,19 +77,30 @@ class WeatherScreen extends ConsumerWidget {
                   data: (online) => !online,
                   orElse: () => false,
                 );
+            final advisories = condition != null
+                ? const BuildAdvisories().call(
+                    current: data.current,
+                    condition: condition,
+                    rain: rain,
+                  )
+                : const <Advisory>[];
             return ListView(
               children: [
                 if (data.isStale)
                   _staleBadge(context, data.fetchedAt, offline),
+                _locationHeader(context, placeAsync),
                 if (rain != null) RainAlertBanner(status: rain),
                 if (condition != null) ConditionCard(condition: condition),
-                CurrentWeatherCard(current: data.current),
+                AdvisoryCard(advisories: advisories),
+                CurrentWeatherCard(
+                    current: data.current, hourly: data.hourly),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
                   child: Text('Dự báo theo giờ',
                       style: Theme.of(context).textTheme.titleMedium),
                 ),
                 HourlyList(hourly: data.hourly),
+                const DigestSettingsCard(),
                 const SizedBox(height: 24),
               ],
             );
@@ -133,6 +141,35 @@ class WeatherScreen extends ConsumerWidget {
           child: AppErrorWidget(error: error, onRetry: () => _refresh(ref)),
         ),
       ],
+    );
+  }
+
+  /// Header địa điểm ĐẦY ĐỦ (không bị cắt như trên AppBar) để người dùng biết
+  /// app đang lấy thời tiết đúng nơi.
+  Widget _locationHeader(BuildContext context, AsyncValue<Place?> placeAsync) {
+    final label = placeAsync.maybeWhen(
+      data: (place) => place?.fullLabel ?? 'Không xác định vị trí',
+      orElse: () => 'Đang xác định vị trí…',
+    );
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.place_outlined,
+              size: 18, color: Theme.of(context).colorScheme.primary),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              label,
+              style: Theme.of(context)
+                  .textTheme
+                  .titleSmall
+                  ?.copyWith(fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
+      ),
     );
   }
 

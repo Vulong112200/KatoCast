@@ -7,10 +7,12 @@ import '../../domain/entities/coordinates.dart';
 import '../../domain/entities/place.dart';
 import '../../domain/repositories/location_repository.dart';
 import '../datasources/location_datasource.dart';
+import '../datasources/nominatim_datasource.dart';
 
 class LocationRepositoryImpl implements LocationRepository {
   final LocationDataSource _dataSource;
-  LocationRepositoryImpl(this._dataSource);
+  final NominatimDataSource _nominatim;
+  LocationRepositoryImpl(this._dataSource, this._nominatim);
 
   @override
   Future<Either<Failure, Coordinates>> getCurrentLocation() async {
@@ -42,15 +44,27 @@ class LocationRepositoryImpl implements LocationRepository {
 
   @override
   Future<Place?> getPlace(Coordinates coords) async {
+    // Ưu tiên Nominatim (địa chỉ VN chi tiết: đường/phường/quận). Chỉ nhận kết
+    // quả khi có ít nhất một cấp dưới tỉnh/thành để chắc chắn chi tiết hơn
+    // plugin; nếu không → fallback plugin nền tảng (hoạt động offline).
+    final osm = await _nominatim.reverseGeocode(coords);
+    if (osm != null &&
+        (osm.thoroughfare != null ||
+            osm.subLocality != null ||
+            osm.subAdministrativeArea != null)) {
+      return osm;
+    }
+
     final mark = await _dataSource.reverseGeocode(
       coords.latitude,
       coords.longitude,
     );
-    if (mark == null) return null;
+    if (mark == null) return osm; // giữ kết quả Nominatim (tỉnh/thành) nếu có.
     return Place(
       coordinates: coords,
       subLocality: mark.subLocality,
       locality: mark.locality,
+      subAdministrativeArea: mark.subAdministrativeArea,
       administrativeArea: mark.administrativeArea,
       country: mark.country,
     );

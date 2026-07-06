@@ -62,14 +62,36 @@ class AppConfig {
   /// Khoảng cách (mét) di chuyển tối thiểu để cập nhật lại vị trí (tối ưu pin).
   static const int locationDistanceFilterMeters = 200;
 
-  /// Chu kỳ background check thời tiết (phút). Android tối thiểu ~15 phút.
+  /// Chu kỳ background check thời tiết (phút) MẶC ĐỊNH. Người dùng có thể đổi
+  /// trong Settings sang một trong [backgroundIntervalOptions]. Lưu ý:
+  /// WorkManager (chỉ dùng khi TẮT foreground service) tối thiểu ~15 phút nên
+  /// giá trị <15 chỉ có hiệu lực thực khi foreground service đang bật.
   static const int backgroundIntervalMinutes = 15;
+
+  /// Các mức chu kỳ nền cho người dùng chọn (phút). Chu kỳ ngắn cập nhật kịp
+  /// thời hơn nhưng tốn pin/nhiệt và tiêu hạn mức API nhanh hơn (3 call/refresh).
+  static const List<int> backgroundIntervalOptions = [5, 10, 15, 30];
 
   /// Ngưỡng thay đổi nhiệt độ mạnh giữa hiện tại và vài giờ tới (°C).
   static const double strongTempDeltaC = 5.0;
 
   /// Ngưỡng thay đổi độ ẩm mạnh (%).
   static const double strongHumidityDeltaPct = 20.0;
+
+  /// Độ ẩm cao gây oi bức (%) — dùng cho ghi chú lưu ý trong app.
+  static const int humidityHighPct = 80;
+
+  /// Độ ẩm thấp gây khô (%) — dùng cho ghi chú lưu ý trong app.
+  static const int humidityLowPct = 30;
+
+  /// Gió coi là "mạnh" (m/s) để nhắc cẩn thận khi di chuyển (~cấp 5 Beaufort).
+  static const double strongWindMs = 10.0;
+
+  /// Khoảng cách tối thiểu (phút) giữa hai lần gọi API làm mới — nhiều trigger
+  /// nền (foreground service + alarm exact + WorkManager) cùng chạy 15' sẽ tự
+  /// khử trùng lặp: cache còn tươi hơn ngưỡng này thì KHÔNG gọi API (tiết kiệm
+  /// hạn mức 1000 call/ngày, mỗi refresh tốn 3 call).
+  static const int minRefreshGapMinutes = 12;
 
   /// Thời gian cache thời tiết còn coi là "tươi" (phút) — dùng cho badge "dữ
   /// liệu cũ" trên UI.
@@ -97,6 +119,17 @@ class AppConfig {
   /// Mốc giờ bản tin buổi chiều mặc định (phút-trong-ngày). 990 = 16:30.
   static const int digestDefaultEveningMinutes = 16 * 60 + 30;
 
+  /// Danh sách mốc giờ bản tin MẶC ĐỊNH (phút-trong-ngày). Người dùng có thể
+  /// thêm/xóa bao nhiêu mốc tùy ý trong màn Thời tiết. Mặc định giữ 2 mốc quen
+  /// thuộc: 6:30 sáng & 16:30 chiều.
+  static const List<int> digestDefaultTimes = [
+    digestDefaultMorningMinutes,
+    digestDefaultEveningMinutes,
+  ];
+
+  /// Số mốc bản tin tối đa (giới hạn dải alarm ID cấp phát trong NotificationIds).
+  static const int digestMaxSlots = 64;
+
   /// Ngưỡng chỉ số UV để nhắc chống nắng trong bản tin.
   static const double digestUvWarnThreshold = 6.0;
 
@@ -122,6 +155,13 @@ class AppConfig {
     'https://lz4.overpass-api.de/api/interpreter',
     'https://overpass.openstreetmap.fr/api/interpreter',
   ];
+
+  /// Reverse geocoding Nominatim (OpenStreetMap) — trả địa chỉ tiếng Việt chi
+  /// tiết (đường → phường → quận → thành phố) tốt hơn plugin nền tảng ở VN.
+  /// Miễn phí, không cần key nhưng chính sách OSM yêu cầu: gửi `userAgent` rõ
+  /// ràng và tối đa ~1 request/giây (app chỉ gọi khi đổi vị trí/refresh nên OK).
+  static const String nominatimReverseUrl =
+      'https://nominatim.openstreetmap.org/reverse';
 
   /// Tile bản đồ nền OpenStreetMap.
   static const String osmTileUrl =

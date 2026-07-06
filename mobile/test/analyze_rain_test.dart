@@ -249,4 +249,40 @@ void main() {
       expect(status.probabilityPct, isNull);
     });
   });
+
+  group('AnalyzeRain - rainEndsAt / durationMinutes (mưa kéo dài đến bao giờ)', () {
+    test('sắp mưa rồi tạnh bền vững ⇒ rainEndsAt + duration đúng', () {
+      // Khô, mưa từ phút 20 đến 29, khô bền vững từ phút 30.
+      final minutely = List<double>.filled(60, 0.0);
+      for (var i = 20; i < 30; i++) {
+        minutely[i] = 1.5;
+      }
+      final status = sut.call(_data(minutely: minutely), now: base);
+      expect(status.phase, RainPhase.rainStartingSoon);
+      expect(status.changeAt, base.add(const Duration(minutes: 20)));
+      expect(status.rainEndsAt, base.add(const Duration(minutes: 30)));
+      expect(status.durationMinutes, 10);
+    });
+
+    test('mưa kéo dài tới hết cửa sổ ⇒ rainEndsAt null', () {
+      final minutely = List<double>.filled(60, 0.0);
+      for (var i = 20; i < 60; i++) {
+        minutely[i] = 1.5;
+      }
+      final status = sut.call(_data(minutely: minutely), now: base);
+      expect(status.phase, RainPhase.rainStartingSoon);
+      expect(status.rainEndsAt, isNull);
+      expect(status.durationMinutes, isNull);
+    });
+
+    test('hourly fallback: sắp mưa giờ 14, tạnh giờ 15 ⇒ rainEndsAt = 15:00', () {
+      final status = sut.call(
+        _data(hourly: [_h(12, 0.1, 0), _h(13, 0.2, 0), _h(14, 0.9, 2.0), _h(15, 0.1, 0)]),
+        now: base,
+      );
+      expect(status.phase, RainPhase.rainStartingSoon);
+      expect(status.changeAt, DateTime(2026, 6, 25, 14));
+      expect(status.rainEndsAt, DateTime(2026, 6, 25, 15));
+    });
+  });
 }

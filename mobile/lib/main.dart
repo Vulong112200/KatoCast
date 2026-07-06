@@ -8,7 +8,7 @@ import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 
 import 'core/app_router.dart';
-import 'core/background/background_worker.dart';
+import 'core/background/background_triggers.dart';
 import 'core/di/providers.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/theme_controller.dart';
@@ -86,16 +86,17 @@ class _KatoCastAppState extends ConsumerState<KatoCastApp> {
     await ref.read(notificationServiceProvider).init();
     await ref.read(permissionServiceProvider).requestNotificationPermission();
 
-    // 2. Đăng ký background check định kỳ. Bọc try để app không chết nếu
-    //    WorkManager lỗi trên một số máy.
-    try {
-      await BackgroundScheduler.initialize();
-    } catch (_) {}
+    // 2. Đăng ký lớp chạy nền. `applyBackgroundTriggers` đảm bảo CHỈ MỘT cơ chế
+    //    drive `runWeatherCheck` tại một thời điểm (tránh 3 lớp cùng đánh thức
+    //    máy mỗi chu kỳ gây nóng): foreground service khi bật, hoặc alarm exact
+    //    + WorkManager khi tắt. Xem `background_triggers.dart`.
+    await applyBackgroundTriggers();
 
-    // 2b. Lần đầu chạy: xin bỏ giới hạn pin (whitelist) để nền chạy ổn định
-    //     trên các máy diệt tiến trình mạnh (Xiaomi/HyperOS, Oppo…). Chỉ hỏi
-    //     một lần để không làm phiền; sau đó người dùng tự chỉnh trong Settings.
-    await _promptBatteryOnce();
+    // 2b. Xin bỏ giới hạn pin (whitelist) để nền chạy ổn định trên các máy diệt
+    //     tiến trình mạnh (Xiaomi/HyperOS, Oppo…). Nhắc lại theo chu kỳ nếu chưa
+    //     được cấp (không phải chỉ một lần) vì đây là điều kiện then chốt để cả
+    //     foreground service lẫn alarm sống sót.
+    await _promptBatteryIfNeeded();
 
     // 3. Lập lịch bản tin hằng ngày qua alarm hệ thống (đáng tin hơn
     //    WorkManager). Nội dung lấy từ cache mới nhất; mỗi lần worker chạy /
@@ -124,13 +125,21 @@ class _KatoCastAppState extends ConsumerState<KatoCastApp> {
     } catch (_) {}
   }
 
-  Future<void> _promptBatteryOnce() async {
+  Future<void> _promptBatteryIfNeeded() async {
     try {
+      final permission = ref.read(permissionServiceProvider);
+      // Đã whitelist → không nhắc.
+      if (await permission.isIgnoringBatteryOptimizations()) return;
+
       final prefs = await SharedPreferences.getInstance();
-      const key = 'battery_prompt_shown';
-      if (prefs.getBool(key) ?? false) return;
-      await prefs.setBool(key, true);
-      await ref.read(permissionServiceProvider).requestIgnoreBatteryOptimizations();
+      const key = 'battery_prompt_last_ms';
+      final lastMs = prefs.getInt(key) ?? 0;
+      final nowMs = DateTime.now().millisecondsSinceEpoch;
+      // Giãn cách tối thiểu 7 ngày giữa hai lần nhắc để không làm phiền.
+      const minGapMs = 7 * 24 * 60 * 60 * 1000;
+      if (lastMs != 0 && nowMs - lastMs < minGapMs) return;
+      await prefs.setInt(key, nowMs);
+      await permission.requestIgnoreBatteryOptimizations();
     } catch (_) {}
   }
 

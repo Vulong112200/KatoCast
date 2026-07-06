@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/di/providers.dart';
 import '../../data/datasources/location_datasource.dart';
+import '../../data/datasources/nominatim_datasource.dart';
 import '../../data/last_location_store.dart';
 import '../../data/repositories/location_repository_impl.dart';
 import '../../domain/entities/coordinates.dart';
@@ -13,8 +14,15 @@ final locationDataSourceProvider = Provider<LocationDataSource>(
   (ref) => LocationDataSource(ref.watch(permissionServiceProvider)),
 );
 
+final nominatimDataSourceProvider = Provider<NominatimDataSource>(
+  (ref) => NominatimDataSource(),
+);
+
 final locationRepositoryProvider = Provider<LocationRepository>(
-  (ref) => LocationRepositoryImpl(ref.watch(locationDataSourceProvider)),
+  (ref) => LocationRepositoryImpl(
+    ref.watch(locationDataSourceProvider),
+    ref.watch(nominatimDataSourceProvider),
+  ),
 );
 
 /// Vị trí hiện tại (1 lần). UI watch provider này; gọi `ref.invalidate` để thử

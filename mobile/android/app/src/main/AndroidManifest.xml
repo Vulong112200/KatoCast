@@ -17,6 +17,11 @@
          SCHEDULE_EXACT_ALARM dự phòng cho Android 12. -->
     <uses-permission android:name="android.permission.USE_EXACT_ALARM"/>
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
+    <!-- Foreground service (flutter_foreground_task): giữ app chạy nền liên tục
+         để cập nhật thời tiết. Android 14+ bắt buộc khai báo foregroundServiceType
+         (dùng dataSync vì đồng bộ dữ liệu thời tiết định kỳ). -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"/>
 
     <application
         android:label="KatoCast"
@@ -73,6 +78,13 @@
         <receiver
             android:exported="false"
             android:name="com.dexterous.flutterlocalnotifications.ActionBroadcastReceiver" />
+
+        <!-- flutter_foreground_task: service giữ app chạy nền. KHÔNG đổi tên
+             service. foregroundServiceType phải khớp quyền đã khai báo ở trên. -->
+        <service
+            android:name="com.pravera.flutter_foreground_task.service.ForegroundService"
+            android:foregroundServiceType="dataSync"
+            android:exported="false" />
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

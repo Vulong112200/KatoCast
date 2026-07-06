@@ -10,7 +10,7 @@ import '../../data/notification_prefs_store.dart';
 /// giờ/bật-tắt mới ngay.
 class NotificationSettingsController extends StateNotifier<DigestPrefs> {
   NotificationSettingsController(this._store)
-      : super(const DigestPrefs.defaults()) {
+      : super(DigestPrefs.defaults()) {
     _load();
   }
 
@@ -26,17 +26,30 @@ class NotificationSettingsController extends StateNotifier<DigestPrefs> {
     await _reschedule();
   }
 
-  Future<void> setMorning(TimeOfDay time) async {
+  /// Thêm một mốc giờ mới (bỏ qua nếu trùng — normalizeTimes tự loại).
+  Future<void> addTime(TimeOfDay time) async {
     final minutes = time.hour * 60 + time.minute;
-    state = state.copyWith(morningMinutes: minutes);
-    await _store.setMorning(minutes);
-    await _reschedule();
+    await _setTimes([...state.times, minutes]);
   }
 
-  Future<void> setEvening(TimeOfDay time) async {
+  /// Xóa mốc giờ ở [index] (theo thứ tự đang hiển thị = đã sort).
+  Future<void> removeTime(int index) async {
+    if (index < 0 || index >= state.times.length) return;
+    final next = [...state.times]..removeAt(index);
+    await _setTimes(next);
+  }
+
+  /// Đổi giờ của mốc ở [index] sang [time].
+  Future<void> updateTime(int index, TimeOfDay time) async {
+    if (index < 0 || index >= state.times.length) return;
     final minutes = time.hour * 60 + time.minute;
-    state = state.copyWith(eveningMinutes: minutes);
-    await _store.setEvening(minutes);
+    final next = [...state.times]..[index] = minutes;
+    await _setTimes(next);
+  }
+
+  Future<void> _setTimes(List<int> minutes) async {
+    state = state.copyWith(times: minutes); // copyWith tự sort + dedupe
+    await _store.setTimes(state.times);
     await _reschedule();
   }
 

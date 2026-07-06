@@ -57,12 +57,12 @@
 
 | Feature | Status | Backend | Mobile | Ghi chú |
 |---------|--------|---------|--------|---------|
-| Định vị (location) | ✅ | — | `features/location/*` (geolocator + geocoding) | current + stream, distanceFilter 200m; reverse geocoding → tên địa danh (`Place`, `currentPlaceProvider`) hiển thị trên AppBar |
+| Định vị (location) | ✅ | — | `features/location/*` (geolocator + geocoding + **Nominatim OSM**) | current + stream, distanceFilter 200m; **reverse geocoding 2 tầng**: ưu tiên **Nominatim** (`NominatimDataSource`, địa chỉ VN chi tiết **đường→phường→quận→thành phố**, `accept-language=vi`) → **fallback plugin `geocoding`** (offline) khi mạng lỗi/không đủ chi tiết. `Place` (+ `thoroughfare`) — AppBar hiện `shortLabel`, **header thân màn hình hiện `fullLabel` đầy đủ** (đường→phường→quận→`subAdministrativeArea`→tỉnh, bỏ trùng, không cắt) để dễ kiểm chứng app lấy đúng vị trí, tránh cắt kiểu "thành phố Hồ Chí Mi…" |
 | Giao diện & cá nhân hóa (theme) | ✅ | — | `core/theme/*` + `features/settings/*` | Sáng/Tối/Hệ thống + bảng màu chọn sẵn + Material You (dynamic_color) + đổi màu theo thời tiết; lưu SharedPreferences; màn Settings (+ guide pin) |
-| Thời tiết (weather) | ✅ | — | `features/weather/*` | One Call **4.0** (3 endpoint→chuẩn hoá); offline-first cache Drift; **stale-while-revalidate** (mở app hiện cache ngay, chỉ gọi API khi cache ≥15'); `AnalyzeRain` (neo mọi phép tính vào `now`, lọc điểm dự báo quá khứ, trả `changeAt` timestamp tuyệt đối + `probabilityPct` theo pop của **giờ chứa sự kiện**, floor 80% khi minutely xác nhận), `DetectEnvChange`; `connectivityStatusProvider` cho badge offline |
+| Thời tiết (weather) | ✅ | — | `features/weather/*` | One Call **4.0** (3 endpoint→chuẩn hoá); offline-first cache Drift; **stale-while-revalidate** (mở app hiện cache ngay, chỉ gọi API khi cache ≥15'); `AnalyzeRain` (neo mọi phép tính vào `now`, lọc điểm dự báo quá khứ, trả `changeAt` timestamp tuyệt đối + **`rainEndsAt`/`durationMinutes`** = mưa kéo dài đến bao giờ + `probabilityPct` theo pop của **giờ chứa sự kiện** (fallback giờ gần nhất), floor 80% khi minutely xác nhận), `DetectEnvChange`; `connectivityStatusProvider` cho badge offline. **UI mở rộng:** header địa điểm **đầy đủ** (`Place.fullLabel`), thẻ **CurrentWeatherCard** (UV kèm band màu + mây% + hi/lo), thẻ **"Lưu ý hôm nay"** (`AdvisoryCard` ← `BuildAdvisories`: tình hình + UV + độ ẩm + gió + mưa) |
 | Phân loại tình hình (condition) | ✅ | — | `weather/domain/entities/weather_condition.dart` + `ConditionCard` | nắng/mây/mưa nhỏ-to/dông/bão lớn/lốc + nhãn + lời khuyên + mức độ |
-| Thông báo thông minh (alerts) | ✅ | — | `features/alerts/*` + `core/background` + `core/notifications` | WorkManager 15', 3 nhóm (mưa/tình hình/môi trường), cá nhân hóa, chống spam; nội dung mưa kèm **giờ cụ thể (HH:MM) từ `changeAt` (không drift theo cache) + % khả năng mưa**; **báo lại "Cập nhật"** khi thời điểm chuyển biến lệch ≥15' dù pha không đổi; worker **bỏ sinh cảnh báo nếu dữ liệu >45'** (cache cũ); `BigTextStyleInformation` chống cắt chữ. Toạ độ nền qua `resolveBackgroundCoords` (last-known ≤24h / fallback `LastLocationStore`) để không bỏ fetch qua đêm; prompt bỏ giới hạn pin lần đầu (Xiaomi/HyperOS) |
-| Bản tin thời tiết hằng ngày (digest) | ✅ | — | `features/alerts/*` (BuildDailyDigest, NotificationPrefsStore, notificationSettingsProvider, **digest_scheduler**) + `core/background/digest_alarm` + `weather/.../build_rain_outlook` | Tự gửi tóm tắt vào khung giờ cố định (mặc định 6h30 & 16h30) qua **`android_alarm_manager_plus`** (`periodic` exact+wakeup+allowWhileIdle+rescheduleOnReboot); tại mốc giờ `digestAlarmCallback` **fetch dữ liệu tươi rồi mới hiển thị** (sửa lỗi zonedSchedule bake text cũ). Nội dung có **outlook mưa cả ngày theo buổi** (`BuildRainOutlook`: 4 buổi Đêm/Sáng/Chiều/Tối phủ đủ 0–24h, **tách từng đợt mưa không liên tục**, >2 đợt → "rải rác nhiều đợt") + gợi ý mưa tức thời (giờ từ `changeAt`) + hi/lo + UV |
+| Thông báo thông minh (alerts) | ✅ | — | `features/alerts/*` + `core/background` + `core/notifications` | **Chỉ 1 lớp nền chạy tại một thời điểm** (qua `applyBackgroundTriggers`, chống nóng máy): **foreground service** (`flutter_foreground_task`, thông báo thường trực live nhiệt độ + giờ cập nhật, sống trong Doze, `allowWifiLock=false`) khi bật → **hủy** alarm+WorkManager; hoặc **alarm exact** (`weather_alarm.dart`) + **WorkManager** (clamp ≥15') khi tắt FG. **Chu kỳ tùy chỉnh 5/10/15/30'** (Settings). Guard quota bám theo chu kỳ (cache tươi hơn chu kỳ−1' → không gọi API). 3 nhóm (mưa/tình hình/môi trường), cá nhân hóa, chống spam; nội dung mưa kèm **giờ bắt đầu + % + giờ tạnh/thời lượng (`rainEndsAt`)**; **báo lại "Cập nhật"** khi thời điểm lệch ≥15'; bỏ sinh cảnh báo nếu dữ liệu >45'; `BigTextStyleInformation` chống cắt chữ. Toạ độ nền qua `resolveBackgroundCoords`; **nhắc bỏ giới hạn pin lặp lại** (mỗi 7 ngày nếu chưa whitelist — Xiaomi/HyperOS) |
+| Bản tin thời tiết hằng ngày (digest) | ✅ | — | `features/alerts/*` (BuildDailyDigest, NotificationPrefsStore, notificationSettingsProvider, **digest_scheduler**) + `core/background/digest_alarm` + `weather/.../build_rain_outlook` + `weather/.../digest_settings_card` | Tự gửi tóm tắt vào **danh sách nhiều mốc giờ TÙY Ý** (thêm/xóa trong **màn Thời tiết** — `DigestSettingsCard`; mặc định 6h30 & 16h30, migrate từ mô hình 2 mốc cũ) qua **`android_alarm_manager_plus`** dùng **`oneShotAt` exact+allowWhileIdle** (KHÔNG `periodic` — bị Doze hoãn; mỗi mốc 1 alarm ID trong **dải động `NotificationIds.digestBase + index`**; callback **re-arm theo index** mốc). **Fix không nổ:** kiểm tra `canScheduleExactAlarms` → thiếu quyền thì **fallback `exact:false`** (không ném `SecurityException` im lặng) + dòng cảnh báo xin quyền trong card; `scheduleDigests` idempotent (hủy toàn dải trước) → gọi lại mỗi chu kỳ tự chữa chuỗi đứt. Tại mốc giờ `digestAlarmCallback` **fetch dữ liệu tươi rồi mới hiển thị**. Nội dung có **outlook mưa cả ngày theo buổi** (`BuildRainOutlook`: 4 buổi phủ 0–24h, tách từng đợt) + gợi ý mưa tức thời (giờ từ `changeAt`, **kèm giờ tạnh**) + hi/lo + **UV kèm lời khuyên theo mức** (`UvAdvice`) |
 | Module 1 — Map & News | ✅ | — | `features/map_news/*` | bản đồ OSM (flutter_map) + lớp mưa OWM; tin tức RSS thời tiết (`MapScreen`, `/map`) |
 | Module 2 — Fixed Route POI | ✅ | — | `features/fixed_route/*` | lưu lộ trình (Drift) + quét POI dọc đường qua Overpass/OSM (`RouteScreen`, `/routes`) |
 | Ghi chú (notes) | ✅ | — | `features/notes/*` + `core/notifications/notification_response_handler.dart` | Note text/checklist, màu, tìm kiếm, khu "Đã xong"; **ghim sticky** lên thanh thông báo (`ongoing`, sống qua "Xoá tất cả", chỉ gỡ bằng nút **"Đã đọc"** — note giữ nguyên trong app); **hẹn nhắc** một lần/hằng ngày/hằng tuần theo thứ (`zonedSchedule` exact, sống qua reboot); re-assert ghim ở bootstrap + worker 15'; ID scheme `10000 + noteId*16 + slot` (`NotesScreen` `/notes`) |
@@ -78,6 +78,7 @@
 | OpenWeatherMap 4.0 | GET | `/data/4.0/onecall/current` | thời tiết hiện tại (`data[0]`) |
 | OpenWeatherMap 4.0 | GET | `/data/4.0/onecall/timeline/15min` | nowcast 15' → chuẩn hoá thành `minutely` |
 | OpenWeatherMap 4.0 | GET | `/data/4.0/onecall/timeline/1h` | dự báo giờ → `hourly` |
+| Nominatim (OSM) | GET | `nominatim.openstreetmap.org/reverse` | reverse geocoding toạ độ → địa chỉ VN chi tiết (đường/phường/quận); `format=jsonv2`, `accept-language=vi`, User-Agent OSM, ≤1 req/s |
 | OpenStreetMap | GET | `tile.openstreetmap.org/{z}/{x}/{y}.png` | tile bản đồ nền (flutter_map) |
 | OpenWeatherMap tiles | GET | `tile.openweathermap.org/map/precipitation_new/...` | lớp phủ lượng mưa trên bản đồ |
 | Overpass (OSM) | POST | `overpass-api.de/api/interpreter` (+ mirror trong `AppConfig.overpassEndpoints`) | quét POI (amenity/shop) quanh lộ trình; thử lần lượt nhiều mirror để chịu lỗi |
@@ -100,7 +101,7 @@
 
 - Backend: `backend/app/core/` (config, security, deps). _(chưa có — Phase 1 client-only)_
 - Mobile shared: `mobile/lib/shared/utils/error_handler.dart` → `extractUserMessage`; widgets `AppErrorWidget`, `LoadingWidget`, `PermissionDeniedWidget`.
-- Mobile core: `core/config/app_config.dart` (API key + ngưỡng + endpoint dịch vụ ngoài: Overpass mirror, OSM/OWM tile, RSS + `User-Agent`), `core/di/providers.dart` (DI Riverpod hạ tầng), `core/network/` (Dio + connectivity), `core/error/` (failures/exceptions), `core/permissions/`, `core/notifications/`, `core/background/` (WorkManager), `core/database/` (Drift).
+- Mobile core: `core/config/app_config.dart` (API key + ngưỡng + endpoint dịch vụ ngoài: Overpass mirror, OSM/OWM tile, RSS + `User-Agent`), `core/di/providers.dart` (DI Riverpod hạ tầng), `core/network/` (Dio + connectivity), `core/error/` (failures/exceptions), `core/permissions/`, `core/notifications/`, `core/background/` (foreground service + alarm exact + WorkManager, đều gọi `runWeatherCheck`), `core/database/` (Drift).
 
 ## 7. Quy trình làm việc & công cụ
 
@@ -115,13 +116,21 @@
 - `backend/app/main.py`, `backend/app/api/router.py`, `backend/app/core/config.py` _(chưa có)_
 - `mobile/lib/main.dart`, `mobile/lib/core/app_router.dart`, `mobile/lib/core/network/api_client.dart`
 - `mobile/lib/core/config/app_config.dart` (API key + ngưỡng tinh chỉnh)
-- `mobile/lib/core/background/background_worker.dart` (WorkManager entry-point)
-- `mobile/lib/features/weather/domain/usecases/analyze_rain.dart` (logic mưa cốt lõi)
+- `mobile/lib/core/background/background_triggers.dart` (**`applyBackgroundTriggers`** — đảm bảo CHỈ 1 lớp trigger chạy tại một thời điểm; gọi ở bootstrap + khi đổi cài đặt nền)
+- `mobile/lib/core/background/weather_check.dart` (**LÕI** kiểm tra thời tiết nền + guard quota bám theo chu kỳ)
+- `mobile/lib/core/background/foreground_service.dart` (foreground service `flutter_foreground_task` — chu kỳ đọc từ prefs, `allowWifiLock=false`)
+- `mobile/lib/core/background/weather_alarm.dart` (alarm exact dự phòng — chỉ khi FG tắt, re-arm theo chu kỳ)
+- `mobile/lib/core/background/background_worker.dart` (WorkManager backstop clamp ≥15' → gọi `runWeatherCheck`, có `cancel()`)
+- `mobile/lib/core/background/background_prefs.dart` (bật/tắt foreground service + chu kỳ nền 5/10/15/30')
+- `mobile/lib/features/weather/domain/usecases/analyze_rain.dart` (logic mưa cốt lõi — `changeAt` + `rainEndsAt`)
+- `mobile/lib/features/weather/domain/entities/uv_advice.dart` (UV → mức + lời khuyên)
+- `mobile/lib/features/weather/domain/usecases/build_advisories.dart` (gom "Lưu ý hôm nay")
 - `mobile/lib/features/alerts/domain/usecases/build_weather_alerts.dart` (sinh thông báo sự kiện)
 - `mobile/lib/features/alerts/domain/usecases/build_daily_digest.dart` (sinh bản tin hằng ngày)
 - `mobile/lib/features/weather/domain/usecases/build_rain_outlook.dart` (outlook mưa cả ngày theo buổi)
-- `mobile/lib/features/alerts/data/digest_scheduler.dart` (lập lịch bản tin qua AlarmManager)
-- `mobile/lib/core/background/digest_alarm.dart` (callback alarm: fetch tươi → hiển thị bản tin)
+- `mobile/lib/features/alerts/data/digest_scheduler.dart` (lập lịch nhiều mốc qua AlarmManager, dải ID động + fallback inexact khi thiếu quyền exact)
+- `mobile/lib/features/weather/presentation/widgets/digest_settings_card.dart` (UI cài đặt bản tin — thêm/xóa mốc giờ + cảnh báo quyền exact-alarm, đặt trong màn Thời tiết)
+- `mobile/lib/core/background/digest_alarm.dart` (callback alarm: fetch tươi → hiển thị bản tin, re-arm theo index mốc)
 - `mobile/lib/core/background/background_location.dart` (resolveBackgroundCoords cho isolate nền)
 - `mobile/lib/features/alerts/data/notification_prefs_store.dart` (cài đặt bản tin)
 - `mobile/lib/core/notifications/notification_service.dart` (3 channel, show/zonedSchedule + details tuỳ biến, BigText)

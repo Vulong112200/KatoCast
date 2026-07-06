@@ -52,6 +52,7 @@ class AnalyzeRain {
       phase: base.phase,
       changeAt: base.changeAt,
       minutesUntilChange: base.minutesUntilChange,
+      rainEndsAt: base.rainEndsAt,
       fromMinutely: base.fromMinutely,
       probabilityPct: pct,
     );
@@ -101,6 +102,8 @@ class AnalyzeRain {
             phase: RainPhase.rainStartingSoon,
             changeAt: minutely[i].time,
             minutesUntilChange: _minutesFrom(ref, minutely[i].time),
+            // Quét tiếp từ lúc bắt đầu mưa để biết khi nào tạnh (kéo dài đến).
+            rainEndsAt: _minutelyRainEnd(minutely, i),
             fromMinutely: true,
           );
         }
@@ -140,6 +143,19 @@ class AnalyzeRain {
     return true;
   }
 
+  /// Từ mốc bắt đầu mưa [rainStart], quét tiếp tìm mốc "khô bền vững" đầu tiên
+  /// → thời điểm cơn mưa tạnh. null nếu tới hết cửa sổ vẫn còn mưa (cơn mưa kéo
+  /// dài quá tầm dự báo ngắn — không khẳng định được giờ tạnh).
+  DateTime? _minutelyRainEnd(List<MinutelyForecast> minutely, int rainStart) {
+    for (var i = rainStart + 1; i < minutely.length; i++) {
+      if (minutely[i].precipitationMmH <= _threshold &&
+          _isDrySustained(minutely, i)) {
+        return minutely[i].time;
+      }
+    }
+    return null;
+  }
+
   // --- Fallback theo giờ ---
   RainStatus _fromHourly(List<HourlyForecast> hourly, DateTime ref) {
     if (hourly.isEmpty) return const RainStatus.dry(fromMinutely: false);
@@ -162,6 +178,8 @@ class AnalyzeRain {
             phase: RainPhase.rainStartingSoon,
             changeAt: hourly[i].time,
             minutesUntilChange: minutes,
+            // Giờ "khô" đầu tiên sau đợt mưa = thời điểm dự kiến tạnh.
+            rainEndsAt: _hourlyRainEnd(hourly, i, isWet),
             fromMinutely: false,
           );
         }
@@ -182,6 +200,19 @@ class AnalyzeRain {
     return const RainStatus.raining(fromMinutely: false);
   }
 
+  /// Từ giờ bắt đầu mưa [rainStart], tìm giờ "khô" đầu tiên → thời điểm tạnh.
+  /// null nếu tới hết dữ liệu giờ vẫn còn ướt.
+  DateTime? _hourlyRainEnd(
+    List<HourlyForecast> hourly,
+    int rainStart,
+    bool Function(HourlyForecast) isWet,
+  ) {
+    for (var i = rainStart + 1; i < hourly.length; i++) {
+      if (!isWet(hourly[i])) return hourly[i].time;
+    }
+    return null;
+  }
+
   /// Xác suất mưa (%) tại GIỜ CHỨA [eventTime] (so timestamp, không chia 60).
   /// [minutelyConfirmed] = nowcast đã thấy mưa → floor xác suất để không mâu
   /// thuẫn kiểu "đang mưa, khả năng 40%". null nếu không có nguồn nào.
@@ -197,6 +228,19 @@ class AnalyzeRain {
         pct = (h.pop * 100).round();
         break;
       }
+    }
+    // Fallback: không có giờ nào chứa đúng eventTime (vd eventTime vượt tầm
+    // hourly, hoặc lệch khối giờ) → dùng pop của giờ liên quan gần nhất để %
+    // vẫn hiển thị thay vì rỗng.
+    if (pct == null && hourly.isNotEmpty) {
+      var nearest = hourly.first;
+      for (final h in hourly) {
+        if ((h.time.difference(eventTime)).abs() <
+            (nearest.time.difference(eventTime)).abs()) {
+          nearest = h;
+        }
+      }
+      pct = (nearest.pop * 100).round();
     }
     if (minutelyConfirmed) {
       const floor = AppConfig.minutelyProbabilityFloorPct;

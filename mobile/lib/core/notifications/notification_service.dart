@@ -196,8 +196,14 @@ class NotificationIds {
   static const int envChange = 1003;
   static const int condition = 1004;
 
-  /// Bản tin thời tiết hằng ngày — mỗi mốc (sáng/chiều) một ID riêng vì cả hai
-  /// được lập lịch song song qua zonedSchedule (chung ID sẽ ghi đè nhau).
+  /// Bản tin thời tiết hằng ngày (mô hình CŨ 2 mốc) — chỉ giữ để hủy khi migrate
+  /// sang dải động [digestBase]. Không dùng để lập lịch mới nữa.
   static const int dailyDigestMorning = 1005;
   static const int dailyDigestEvening = 1006;
+
+  /// Bản tin thời tiết hằng ngày — dải ID động cho danh sách nhiều mốc tùy ý.
+  /// Mốc thứ `i` (index trong danh sách đã sort) → ID `digestBase + i`. Dải
+  /// [1100, 1100 + AppConfig.digestMaxSlots) nằm dưới dải ghi chú (10000+) nên
+  /// không đụng. Số mốc tối đa xem `AppConfig.digestMaxSlots`.
+  static const int digestBase = 1100;
 }

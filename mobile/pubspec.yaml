@@ -30,6 +30,9 @@ dependencies:
   # Alarm hệ thống chạy code Dart nền ĐÚNG mốc giờ (kể cả app đã tắt) → bản tin
   # hằng ngày tự fetch dữ liệu tươi ngay lúc bắn thay vì hiển thị text đã cũ.
   android_alarm_manager_plus: ^4.0.4
+  # Foreground service: giữ tiến trình sống liên tục (thông báo thường trực) để
+  # cập nhật thời tiết & cảnh báo mưa đều đặn kể cả khi màn hình tắt/Doze.
+  flutter_foreground_task: ^8.17.0
   timezone: ^0.9.4
   # Lấy tên múi giờ thiết bị để set tz.local (zonedSchedule bắn đúng giờ địa phương).
   flutter_timezone: ^3.0.1

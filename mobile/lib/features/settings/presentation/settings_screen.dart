@@ -1,13 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/config/app_config.dart';
 import '../../../core/di/providers.dart';
-import '../../../core/notifications/notification_service.dart';
 import '../../../core/theme/theme_controller.dart';
 import '../../../core/theme/theme_palettes.dart';
-import '../../alerts/domain/usecases/build_daily_digest.dart';
-import '../../alerts/presentation/providers/notification_settings_provider.dart';
-import '../../weather/presentation/providers/weather_provider.dart';
+import 'providers/background_settings_provider.dart';
 
 /// Màn hình cài đặt: giao diện (theme), thông báo, chạy nền & pin, giới thiệu.
 class SettingsScreen extends ConsumerWidget {
@@ -102,7 +100,14 @@ class SettingsScreen extends ConsumerWidget {
           const Divider(height: 32),
           _sectionTitle(context, 'Thông báo'),
           _NotificationTile(),
-          const _DailyDigestSettings(),
+          const Padding(
+            padding: EdgeInsets.fromLTRB(16, 4, 16, 8),
+            child: Text(
+              'Cài đặt "Bản tin hằng ngày" (thêm/bớt mốc giờ) đã chuyển sang màn '
+              'Thời tiết, ngay dưới dự báo theo giờ.',
+              style: TextStyle(fontStyle: FontStyle.italic),
+            ),
+          ),
 
           const Divider(height: 32),
           _sectionTitle(context, 'Chạy nền & pin'),
@@ -115,6 +120,20 @@ class SettingsScreen extends ConsumerWidget {
               'và bỏ giới hạn pin để thông báo hoạt động ổn định.',
             ),
           ),
+          SwitchListTile(
+            secondary: const Icon(Icons.sync_outlined),
+            title: const Text('Theo dõi thời tiết liên tục'),
+            subtitle: const Text(
+              'Giữ một thông báo thường trực để cập nhật thời tiết & cảnh báo '
+              'mưa đều đặn kể cả khi tắt màn hình. Tắt nếu bạn không muốn thông '
+              'báo thường trực (thông báo có thể kém kịp thời hơn).',
+            ),
+            value: ref.watch(backgroundSettingsProvider).foregroundEnabled,
+            onChanged: (v) => ref
+                .read(backgroundSettingsProvider.notifier)
+                .setForegroundEnabled(v),
+          ),
+          const _IntervalSetting(),
           ListTile(
             leading: const Icon(Icons.battery_saver_outlined),
             title: const Text('Bỏ giới hạn pin cho KatoCast'),
@@ -270,121 +289,45 @@ class _NotificationTileState extends ConsumerState<_NotificationTile> {
   }
 }
 
-/// Cài đặt "Bản tin hằng ngày": bật/tắt + chỉnh giờ sáng/chiều + gửi thử.
-class _DailyDigestSettings extends ConsumerWidget {
-  const _DailyDigestSettings();
+/// Bộ chọn chu kỳ cập nhật nền (5/10/15/30') + cảnh báo hạn mức/pin.
+class _IntervalSetting extends ConsumerWidget {
+  const _IntervalSetting();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final prefs = ref.watch(notificationSettingsProvider);
-    final controller = ref.read(notificationSettingsProvider.notifier);
-    final enabled = prefs.enabled;
+    final current = ref.watch(backgroundSettingsProvider).intervalMinutes;
+    final controller = ref.read(backgroundSettingsProvider.notifier);
 
     return Column(
       mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SwitchListTile(
-          secondary: const Icon(Icons.schedule_outlined),
-          title: const Text('Bản tin hằng ngày'),
-          subtitle: const Text(
-            'Tự gửi tóm tắt nhiệt độ, tình hình và lưu ý vào khung giờ bạn chọn.',
-          ),
-          value: enabled,
-          onChanged: (v) => controller.setEnabled(v),
+        const Padding(
+          padding: EdgeInsets.fromLTRB(16, 8, 16, 4),
+          child: Text('Chu kỳ cập nhật nền'),
         ),
-        Opacity(
-          opacity: enabled ? 1 : 0.4,
-          child: IgnorePointer(
-            ignoring: !enabled,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _TimeTile(
-                  icon: Icons.wb_twilight_outlined,
-                  label: 'Buổi sáng',
-                  minutes: prefs.morningMinutes,
-                  onPick: controller.setMorning,
-                ),
-                _TimeTile(
-                  icon: Icons.wb_sunny_outlined,
-                  label: 'Buổi chiều',
-                  minutes: prefs.eveningMinutes,
-                  onPick: controller.setEvening,
-                ),
-              ],
-            ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+          child: SegmentedButton<int>(
+            segments: [
+              for (final m in AppConfig.backgroundIntervalOptions)
+                ButtonSegment(value: m, label: Text("$m'")),
+            ],
+            selected: {current},
+            onSelectionChanged: (s) => controller.setIntervalMinutes(s.first),
           ),
         ),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-            child: TextButton.icon(
-              icon: const Icon(Icons.send_outlined),
-              label: const Text('Gửi thử bản tin ngay'),
-              onPressed: () => _sendTest(context, ref),
-            ),
+        const Padding(
+          padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
+          child: Text(
+            'Chu kỳ ngắn (5–10\') cập nhật kịp thời hơn nhưng tốn pin/làm nóng '
+            'máy hơn và tiêu hạn mức API nhanh (mỗi lần làm mới = 3 lượt gọi; '
+            '5\' ≈ 860 lượt/ngày, gần trần 1000/ngày). Khi tắt "Theo dõi liên '
+            'tục", hệ thống cập nhật tối thiểu mỗi 15\'.',
+            style: TextStyle(fontSize: 12),
           ),
         ),
       ],
-    );
-  }
-
-  Future<void> _sendTest(BuildContext context, WidgetRef ref) async {
-    final messenger = ScaffoldMessenger.of(context);
-    try {
-      final data = await ref.read(weatherProvider.future);
-      final digest = const BuildDailyDigest().call(data);
-      final notif = NotificationService();
-      await notif.show(
-        id: NotificationIds.dailyDigestMorning,
-        title: digest.title,
-        body: digest.body,
-      );
-      messenger.showSnackBar(
-        const SnackBar(content: Text('Đã gửi bản tin thử.')),
-      );
-    } catch (_) {
-      messenger.showSnackBar(
-        const SnackBar(
-          content: Text('Chưa lấy được dữ liệu thời tiết để gửi thử.'),
-        ),
-      );
-    }
-  }
-}
-
-/// Một dòng chọn giờ (mở time picker) cho bản tin.
-class _TimeTile extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final int minutes;
-  final Future<void> Function(TimeOfDay) onPick;
-
-  const _TimeTile({
-    required this.icon,
-    required this.label,
-    required this.minutes,
-    required this.onPick,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final time = minutesToTimeOfDay(minutes);
-    return ListTile(
-      leading: Icon(icon),
-      title: Text(label),
-      trailing: Text(
-        time.format(context),
-        style: Theme.of(context).textTheme.titleMedium,
-      ),
-      onTap: () async {
-        final picked = await showTimePicker(
-          context: context,
-          initialTime: time,
-        );
-        if (picked != null) await onPick(picked);
-      },
     );
   }
 }
