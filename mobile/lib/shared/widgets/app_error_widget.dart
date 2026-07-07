@@ -17,7 +17,9 @@ class AppErrorWidget extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.cloud_off, size: 56, color: Colors.grey),
+            const Text('😿', style: TextStyle(fontSize: 48)),
+            const SizedBox(height: 8),
+            const Icon(Icons.cloud_off, size: 40, color: Colors.grey),
             const SizedBox(height: 12),
             Text(
               extractUserMessage(error),

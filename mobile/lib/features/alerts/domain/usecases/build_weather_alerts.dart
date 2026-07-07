@@ -1,4 +1,5 @@
 import '../../../../core/config/app_config.dart';
+import '../../../../core/kato/kato_voice.dart';
 import '../../../../core/notifications/notification_service.dart';
 import '../../../weather/domain/entities/rain_status.dart';
 import '../../../weather/domain/entities/weather_condition.dart';
@@ -48,10 +49,11 @@ class BuildWeatherAlerts {
           }
         case RainPhase.dry:
           if (_wasRaining(previousPhase)) {
-            alerts.add(const WeatherAlert(
+            alerts.add(WeatherAlert(
               id: NotificationIds.rainStop,
               title: 'Trời đã tạnh mưa',
-              body: 'Trời đã tạnh mưa tại khu vực của bạn, đường vẫn còn ướt, '
+              body: '${KatoVoice.cleared(ref.minute)}'
+                  'Trời đã tạnh mưa tại khu vực của bạn, đường vẫn còn ướt, '
                   'hãy di chuyển cẩn thận.',
             ));
           }
@@ -60,7 +62,8 @@ class BuildWeatherAlerts {
             alerts.add(WeatherAlert(
               id: NotificationIds.rainStart,
               title: 'Trời đang mưa',
-              body: 'Hiện đang có mưa tại vị trí của bạn.'
+              body: '${KatoVoice.raining(ref.minute)}'
+                  'Hiện đang có mưa tại vị trí của bạn.'
                   '${_chanceSuffix(rain.probabilityPct, raining: true)} '
                   'Hãy chuẩn bị áo mưa và chú ý đường trơn trượt.',
             ));
@@ -91,10 +94,11 @@ class BuildWeatherAlerts {
 
     // --- 3. Thay đổi môi trường mạnh — chỉ phát 1 lần cho tới khi hết mạnh ---
     if (env.hasStrongChange && !envAlreadyNotified) {
-      alerts.add(const WeatherAlert(
+      alerts.add(WeatherAlert(
         id: NotificationIds.envChange,
         title: 'Thời tiết đang thay đổi mạnh',
-        body: 'Độ ẩm/Nhiệt độ hiện tại đang thay đổi mạnh, '
+        body: '${KatoVoice.envChange(ref.minute)}'
+            'Độ ẩm/Nhiệt độ hiện tại đang thay đổi mạnh, '
             'chú ý không gian sống và thú cưng.',
       ));
     }
@@ -111,7 +115,8 @@ class BuildWeatherAlerts {
   WeatherAlert _rainStartAlert(RainStatus rain, DateTime ref) => WeatherAlert(
         id: NotificationIds.rainStart,
         title: 'Sắp mưa tại khu vực của bạn',
-        body: 'Dự kiến mưa ${_timingPhrase(rain, ref)} tại vị trí của '
+        body: '${KatoVoice.rainIncoming(ref.minute)}'
+            'Dự kiến mưa ${_timingPhrase(rain, ref)} tại vị trí của '
             'bạn.${_chanceSuffix(rain.probabilityPct)}'
             '${_durationSuffix(rain)} '
             'Hãy chuẩn bị áo mưa và chú ý đường trơn trượt.',
@@ -130,7 +135,8 @@ class BuildWeatherAlerts {
   WeatherAlert _rainStopAlert(RainStatus rain, DateTime ref) => WeatherAlert(
         id: NotificationIds.rainStop,
         title: 'Mưa sắp tạnh',
-        body: 'Mưa dự kiến tạnh ${_timingPhrase(rain, ref)}. '
+        body: '${KatoVoice.rainStopping(ref.minute)}'
+            'Mưa dự kiến tạnh ${_timingPhrase(rain, ref)}. '
             'Đường vẫn còn ướt, hãy di chuyển cẩn thận.',
       );
 

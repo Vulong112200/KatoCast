@@ -1,3 +1,4 @@
+import '../../../../core/kato/kato_voice.dart';
 import '../../../weather/domain/entities/rain_status.dart';
 import '../../../weather/domain/entities/uv_advice.dart';
 import '../../../weather/domain/entities/weather.dart';
@@ -31,8 +32,11 @@ class BuildDailyDigest {
     // Tiêu đề: emoji + nhãn tình hình + nhiệt độ hiện tại.
     final title = '${condition.emoji} ${condition.label} · ${c.tempC.round()}°C';
 
+    // Câu chào mở đầu mang giọng Kato (phân biệt sáng/tối theo mốc giờ).
+    final ref = now ?? DateTime.now();
     final parts = <String>[
-      'Cảm giác như ${c.feelsLikeC.round()}°C, độ ẩm ${c.humidity}%.',
+      '${KatoVoice.digest(morning: ref.hour < 12, seed: ref.minute)}'
+          'Cảm giác như ${c.feelsLikeC.round()}°C, độ ẩm ${c.humidity}%.',
     ];
 
     // Hi/lo trong 24h tới (nếu có dữ liệu hourly).

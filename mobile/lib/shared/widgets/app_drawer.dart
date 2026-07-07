@@ -20,7 +20,7 @@ class AppDrawer extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                Icon(Icons.cloud, size: 40, color: scheme.onPrimaryContainer),
+                const Text('🐱', style: TextStyle(fontSize: 40)),
                 const SizedBox(height: 8),
                 Text('KatoCast',
                     style: Theme.of(context).textTheme.titleLarge?.copyWith(

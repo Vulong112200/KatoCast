@@ -12,7 +12,6 @@ class AdvisoryCard extends StatelessWidget {
   Widget build(BuildContext context) {
     if (advisories.isEmpty) return const SizedBox.shrink();
     final t = Theme.of(context).textTheme;
-    final scheme = Theme.of(context).colorScheme;
     return Card(
       margin: const EdgeInsets.fromLTRB(16, 8, 16, 8),
       child: Padding(
@@ -22,10 +21,9 @@ class AdvisoryCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                Icon(Icons.tips_and_updates_outlined,
-                    size: 20, color: scheme.primary),
+                const Text('🐾', style: TextStyle(fontSize: 18)),
                 const SizedBox(width: 8),
-                Text('Lưu ý hôm nay',
+                Text('Kato mách bạn',
                     style: t.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
               ],
             ),

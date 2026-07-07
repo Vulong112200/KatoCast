@@ -36,7 +36,7 @@ class WeatherScreen extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('KatoCast'),
+            const Text('KatoCast 🐾'),
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [

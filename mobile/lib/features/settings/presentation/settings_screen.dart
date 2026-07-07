@@ -183,7 +183,34 @@ class SettingsScreen extends ConsumerWidget {
             title: Text('KatoCast'),
             subtitle: Text('Dự báo thời tiết cá nhân hóa · phiên bản 1.0.0'),
           ),
+          ListTile(
+            leading: const Text('🐱', style: TextStyle(fontSize: 24)),
+            title: const Text('Về chú mèo Kato'),
+            subtitle: const Text('Vì sao app tên là KatoCast?'),
+            onTap: () => _showAboutKato(context),
+          ),
           const SizedBox(height: 24),
+        ],
+      ),
+    );
+  }
+
+  void _showAboutKato(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('🐱 Chú mèo Kato'),
+        content: const Text(
+          'KatoCast được đặt theo tên Kato — chú mèo Bengal lai mèo rừng ta, '
+          'lông nâu sọc trắng. Kato thính tai, nhạy mũi và rất giỏi "đánh hơi" '
+          'thời tiết, nên app này đồng hành cùng bạn mỗi ngày dưới cái tên của '
+          'cậu ấy. 🐾',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Meo~ đóng lại'),
+          ),
         ],
       ),
     );

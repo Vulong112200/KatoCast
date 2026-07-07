@@ -17,6 +17,8 @@ const List<AppPalette> kAppPalettes = [
   AppPalette(id: 'orange', label: 'Cam', seed: Color(0xFFEF6C00)),
   AppPalette(id: 'purple', label: 'Tím', seed: Color(0xFF6A4CAF)),
   AppPalette(id: 'pink', label: 'Hồng', seed: Color(0xFFC2185B)),
+  // Tông nâu Bengal của chú mèo Kato (lông nâu sọc trắng).
+  AppPalette(id: 'kato', label: 'Nâu Kato 🐾', seed: Color(0xFF8B5E3C)),
 ];
 
 /// Bảng màu mặc định (khớp tông logo).
