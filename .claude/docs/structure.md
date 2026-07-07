@@ -32,7 +32,7 @@ backend/
 ```
 mobile/
 ├── lib/
-│   ├── main.dart                 # ProviderScope, init timezone + AndroidAlarmManager, notif/permission, khởi động nền qua applyBackgroundTriggers (CHỈ 1 lớp: FG service khi bật, hoặc alarm exact + WorkManager khi tắt), nhắc pin lặp 7 ngày, lập lịch digest, AppLifecycleListener (resume→refresh), MaterialApp.router
+│   ├── main.dart                 # ProviderScope, init timezone + AndroidAlarmManager, notif/permission + xin exact-alarm, khởi động nền qua applyBackgroundTriggers, nhắc pin, lập lịch digest, CHẠY runWeatherCheck khi mở app (cảnh báo tức thì), onboarding Tự-khởi-động 1 lần, AppLifecycleListener (resume→refresh), MaterialApp.router
 │   ├── core/
 │   │   ├── app_router.dart        # GoRouter: '/' Weather · '/map' Map&News · '/routes' RouteScreen · '/notes' (+/notes/edit) Notes · '/settings' Settings
 │   │   ├── config/app_config.dart # API key (--dart-define) + ngưỡng mưa/pin/chu kỳ (backgroundIntervalOptions 5/10/15/30) + digestDefaultTimes + digestMaxSlots
@@ -45,18 +45,18 @@ mobile/
 │   │   ├── error/
 │   │   │   ├── failures.dart        # sealed Failure (Network/Server/Cache/Permission/Unexpected)
 │   │   │   └── exceptions.dart      # exceptions tầng data
-│   │   ├── permissions/permission_service.dart   # geolocator + permission_handler (vị trí/thông báo/pin + isExactAlarmGranted/requestExactAlarmPermission)
+│   │   ├── permissions/permission_service.dart   # geolocator + permission_handler (vị trí/thông báo/pin + isExactAlarmGranted/requestExactAlarmPermission + openAutoStartSettings qua MethodChannel katocast/oem)
 │   │   ├── notifications/
 │   │   │   ├── notification_service.dart          # flutter_local_notifications: 3 channel (weather/note ghim/note nhắc), show/showWithDetails (BigText) + scheduleDaily/zonedScheduleWithDetails/cancel + getLaunchDetails + IDs
 │   │   │   └── notification_response_handler.dart # onNotificationTap (mở /notes) + onNotificationActionBackground (isolate riêng: "Đã đọc" → unpin DB + re-sync lịch)
-│   │   └── background/                        # background_triggers (applyBackgroundTriggers: đảm bảo CHỈ 1 lớp drive runWeatherCheck — FG khi bật thì hủy alarm+WorkManager, ngược lại) · weather_check (LÕI runWeatherCheck + guard quota bám theo chu kỳ prefs) · foreground_service (flutter_foreground_task, chu kỳ đọc từ prefs, allowWifiLock=false) · weather_alarm (alarm exact dự phòng, chỉ khi FG tắt, re-arm theo chu kỳ) · background_worker (WorkManager backstop, clamp ≥15', có cancel()) · background_prefs (bật/tắt FG + intervalMinutes 5/10/15/30) · background_location (resolveBackgroundCoords) · digest_alarm (AlarmManager oneShotAt fetch tươi → bản tin, re-arm theo index mốc)
+│   │   └── background/                        # background_triggers (applyBackgroundTriggers: FG bật→FG+alarm exact backstop song song, hủy WorkManager; FG tắt→alarm+WorkManager) · weather_check (LÕI runWeatherCheck + guard quota bám chu kỳ prefs) · foreground_service (flutter_foreground_task, chu kỳ từ prefs, allowWifiLock=false, re-assert ghim ghi chú mỗi tick) · weather_alarm (alarm exact BACKSTOP thường trực, luôn re-arm) · background_worker (WorkManager backstop, clamp ≥15', có cancel()) · background_prefs (bật/tắt FG + intervalMinutes 5/10/15/30) · background_location (resolveBackgroundCoords) · digest_alarm (AlarmManager oneShotAt fetch tươi → bản tin, re-arm theo index; xử lý digestTest riêng)
 │   ├── shared/
 │   │   ├── utils/error_handler.dart   # extractUserMessage(e)
 │   │   └── widgets/                    # AppErrorWidget, LoadingWidget, PermissionDeniedWidget, AppDrawer (điều hướng)
 │   └── features/
 │       ├── location/   # domain(Coordinates, Place +thoroughfare, repo) · data(datasource geolocator+geocoding, nominatim_datasource reverse OSM, repo impl ưu tiên Nominatim→fallback plugin, LastLocationStore) · presentation(providers: current/stream/place/nominatimDS)
-│       ├── settings/   # presentation(SettingsScreen + providers/background_settings_provider: state BackgroundSettings {foregroundEnabled, intervalMinutes}): theme/bảng màu/Material You/đổi-màu + quyền thông báo + công tắc theo-dõi-liên-tục (FG) + bộ chọn chu kỳ 5/10/15/30' (_IntervalSetting) + guide pin (phần cài đặt bản tin ĐÃ chuyển sang màn Weather)
-│       ├── weather/    # domain(entities +UvAdvice, usecases AnalyzeRain +rainEndsAt / DetectEnvChange / BuildRainOutlook / BuildAdvisories) · data(model mapper, datasources, repo) · presentation(providers, WeatherScreen +header địa điểm đầy đủ, widgets: current_card +UV/mây/hi-lo, advisory_card "Lưu ý hôm nay", digest_settings_card "Bản tin hằng ngày" (nhiều mốc giờ tùy ý + cảnh báo quyền exact-alarm + gửi thử), condition/hourly/rain_banner)
+│       ├── settings/   # presentation(SettingsScreen + providers/background_settings_provider: state BackgroundSettings {foregroundEnabled, intervalMinutes}): theme/bảng màu/Material You/đổi-màu + quyền thông báo + công tắc theo-dõi-liên-tục (FG) + bộ chọn chu kỳ 5/10/15/30' (_IntervalSetting) + guide pin + nút "Bật Tự khởi động" (openAutoStartSettings) (phần cài đặt bản tin ĐÃ chuyển sang màn Weather)
+│       ├── weather/    # domain(entities +UvAdvice, usecases AnalyzeRain +rainEndsAt / DetectEnvChange / BuildRainOutlook / BuildAdvisories) · data(model mapper, datasources, repo) · presentation(providers, WeatherScreen +header địa điểm đầy đủ, widgets: current_card +UV/mây/hi-lo, advisory_card "Lưu ý hôm nay", digest_settings_card "Bản tin hằng ngày" (nhiều mốc giờ tùy ý + cảnh báo quyền exact-alarm + gửi thử ngay + test chạy nền 1'), condition/hourly/rain_banner)
 │       ├── alerts/     # domain(WeatherAlert, BuildWeatherAlerts +giờ tạnh/thời lượng, BuildDailyDigest +UV band, nhận now) · data(AlertStateStore, NotificationPrefsStore: DigestPrefs {enabled, List<int> times} + migrate key cũ, digest_scheduler→AlarmManager oneShotAt dải ID động + fallback inexact) · presentation(notificationSettingsProvider: addTime/removeTime/updateTime)
 │       ├── map_news/   # MODULE 1: NewsItem · RssDataSource (xml) · NewsRepositoryImpl · MapScreen (flutter_map + lớp mưa OWM + tin RSS)
 │       ├── fixed_route/# MODULE 2: RoutePoint/Poi · RouteLocalDataSource (Drift) · OverpassDataSource · PoiRepositoryImpl · RouteScreen (flutter_map) · poi_visuals

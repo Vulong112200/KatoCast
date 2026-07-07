@@ -115,9 +115,10 @@ class SettingsScreen extends ConsumerWidget {
             padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
             child: Text(
               'KatoCast kiểm tra thời tiết định kỳ kể cả khi bạn đã tắt app. '
-              'Một số hãng (Xiaomi/MIUI, Samsung, Oppo…) có thể chặn tiến trình '
-              'nền, khiến thông báo bị trễ hoặc mất. Hãy cho phép app chạy nền '
-              'và bỏ giới hạn pin để thông báo hoạt động ổn định.',
+              'Nhiều hãng (Nubia/MyOS, Xiaomi/HyperOS, Oppo, vivo…) khi bạn VUỐT '
+              'TẮT app khỏi màn hình gần đây sẽ dừng app và HỦY mọi thông báo hẹn '
+              'giờ. Để thông báo hoạt động ổn định, hãy BẬT "Tự khởi động" và đặt '
+              'pin ở chế độ "Không giới hạn" cho KatoCast.',
             ),
           ),
           SwitchListTile(
@@ -155,11 +156,22 @@ class SettingsScreen extends ConsumerWidget {
             },
           ),
           ListTile(
+            leading: const Icon(Icons.rocket_launch_outlined),
+            title: const Text('Bật "Tự khởi động" (Autostart)'),
+            subtitle: const Text(
+                'Cho phép KatoCast tự chạy lại — BẮT BUỘC để thông báo nổ đúng '
+                'giờ sau khi vuốt tắt app (Nubia/Xiaomi/Oppo…).'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () =>
+                ref.read(permissionServiceProvider).openAutoStartSettings(),
+          ),
+          ListTile(
             leading: const Icon(Icons.settings_applications_outlined),
             title: const Text('Mở cài đặt ứng dụng'),
             subtitle: const Text(
-                'Xiaomi: bật "Tự khởi động" & "Không giới hạn" trong mục Pin; '
-                'Samsung: tắt "Đưa app vào chế độ ngủ".'),
+                'Nếu không mở được trang Tự khởi động: vào đây → mục Pin đặt '
+                '"Không giới hạn"; Nubia/MyOS: bật "Tự khởi động" trong quản lý '
+                'ứng dụng nền.'),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => ref.read(permissionServiceProvider).openSettings(),
           ),

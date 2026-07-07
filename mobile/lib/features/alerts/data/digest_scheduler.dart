@@ -68,6 +68,25 @@ Future<void> scheduleDigestSlot(int id, int minutesOfDay) async {
   );
 }
 
+/// Đặt một bản tin THỬ sau [delay] (mặc định 1 phút) qua alarm hệ thống — công
+/// cụ tự chẩn đoán: nếu nó nổ (khi khóa màn hình, KHÔNG vuốt tắt) thì khâu lập
+/// lịch OK; nếu vuốt tắt app rồi không nổ → thiết bị force-stop, cần bật Tự khởi
+/// động. Dùng `NotificationIds.digestTest` (dưới digestBase) nên callback không
+/// re-arm — bắn đúng một lần.
+Future<void> scheduleDigestTest({
+  Duration delay = const Duration(minutes: 1),
+}) async {
+  final exact = await canScheduleExactAlarms();
+  await AndroidAlarmManager.oneShotAt(
+    DateTime.now().add(delay),
+    NotificationIds.digestTest,
+    digestAlarmCallback,
+    exact: exact,
+    wakeup: true,
+    allowWhileIdle: true,
+  );
+}
+
 /// Thiết bị hiện có được đặt báo thức CHÍNH XÁC không (Android 12+ mới cần).
 /// Trả true khi được cấp hoặc khi nền tảng không áp dụng khái niệm này.
 Future<bool> canScheduleExactAlarms() async {

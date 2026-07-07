@@ -1,6 +1,9 @@
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 
+import '../../features/notes/data/note_notification_service.dart';
 import '../config/app_config.dart';
+import '../database/app_database.dart';
+import '../notifications/notification_service.dart';
 import 'background_prefs.dart';
 import 'weather_check.dart';
 
@@ -35,6 +38,11 @@ class _WeatherTaskHandler extends TaskHandler {
   Future<void> onDestroy(DateTime timestamp) async {}
 
   Future<void> _tick() async {
+    // Re-assert ghim ghi chú TRƯỚC (DB riêng, try riêng) — khi FG là lớp duy
+    // nhất còn chạy, đây là nơi duy nhất hồi phục ghim sau reboot/"Xoá tất cả".
+    try {
+      await _reassertNotes();
+    } catch (_) {}
     try {
       final data = await runWeatherCheck();
       if (data != null) {
@@ -45,6 +53,15 @@ class _WeatherTaskHandler extends TaskHandler {
       }
     } catch (_) {
       // Nuốt lỗi để service không chết; chu kỳ sau thử lại.
+    }
+  }
+
+  Future<void> _reassertNotes() async {
+    final db = AppDatabase();
+    try {
+      await reassertNoteNotifications(db, NotificationService());
+    } finally {
+      await db.close();
     }
   }
 }

@@ -45,13 +45,11 @@ Future<void> _run() async {
   try {
     await runWeatherCheck();
   } catch (_) {}
-  // Re-arm cho chu kỳ kế tiếp (one-shot không tự lặp) — CHỈ khi foreground
-  // service đang TẮT. Nếu FG bật, nó là lớp duy nhất; không tự nhân bản alarm
-  // lại (tránh 2 lớp cùng đánh thức máy gây nóng).
+  // Re-arm cho chu kỳ kế tiếp (one-shot không tự lặp). Alarm exact là BACKSTOP
+  // thường trực (chạy cả khi FG bật) → luôn tự re-arm. Guard quota trong
+  // runWeatherCheck khử gọi API trùng với FG tick nên không tốn thêm hạn mức.
   try {
-    if (!await BackgroundPrefsStore().foregroundEnabled()) {
-      await scheduleWeatherAlarm();
-    }
+    await scheduleWeatherAlarm();
   } catch (_) {}
 }
 

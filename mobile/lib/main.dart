@@ -9,6 +9,7 @@ import 'package:timezone/timezone.dart' as tz;
 
 import 'core/app_router.dart';
 import 'core/background/background_triggers.dart';
+import 'core/background/weather_check.dart';
 import 'core/di/providers.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/theme_controller.dart';
@@ -85,6 +86,11 @@ class _KatoCastAppState extends ConsumerState<KatoCastApp> {
     //    vẫn chạy, chỉ không gửi alert.
     await ref.read(notificationServiceProvider).init();
     await ref.read(permissionServiceProvider).requestNotificationPermission();
+    // Xin quyền báo thức CHÍNH XÁC (Android 12/API 31): thiếu quyền → bản tin
+    // hẹn giờ chỉ nổ gần đúng. Vô hại trên Android 13+ (USE_EXACT_ALARM tự cấp).
+    try {
+      await ref.read(permissionServiceProvider).requestExactAlarmPermission();
+    } catch (_) {}
 
     // 2. Đăng ký lớp chạy nền. `applyBackgroundTriggers` đảm bảo CHỈ MỘT cơ chế
     //    drive `runWeatherCheck` tại một thời điểm (tránh 3 lớp cùng đánh thức
@@ -113,6 +119,16 @@ class _KatoCastAppState extends ConsumerState<KatoCastApp> {
       );
     } catch (_) {}
 
+    // 4b. Chạy kiểm tra thời tiết NGAY khi mở app (một lần) → khởi tạo trạng
+    //     thái cảnh báo (AlertStateStore) + bắn cảnh báo tức thì nếu đang
+    //     sắp/đổi mưa + làm tươi thông báo thường trực. Không await để không
+    //     chặn khởi động UI; bọc catch vì runWeatherCheck tự dựng/đóng DB.
+    runWeatherCheck().catchError((_) => null);
+
+    // 4c. Onboarding chống bị OEM giết (Nubia/MyOS…): lần đầu, nếu chưa bỏ giới
+    //     hạn pin → hướng dẫn bật Tự khởi động + Không giới hạn pin.
+    await _promptAutostartOnboardingIfNeeded();
+
     // 5. App được mở từ notification ghi chú (cold launch) → vào màn Ghi chú.
     try {
       final launch =
@@ -140,6 +156,56 @@ class _KatoCastAppState extends ConsumerState<KatoCastApp> {
       if (lastMs != 0 && nowMs - lastMs < minGapMs) return;
       await prefs.setInt(key, nowMs);
       await permission.requestIgnoreBatteryOptimizations();
+    } catch (_) {}
+  }
+
+  /// Onboarding MỘT LẦN: hướng dẫn bật Tự khởi động + Không giới hạn pin để
+  /// thông báo sống sót khi vuốt tắt app trên OEM diệt tiến trình mạnh.
+  Future<void> _promptAutostartOnboardingIfNeeded() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      const key = 'onboarded_bg';
+      if (prefs.getBool(key) ?? false) return;
+
+      final permission = ref.read(permissionServiceProvider);
+      // Đã bỏ giới hạn pin rồi → coi như đã cấu hình cơ bản, chỉ ghi cờ.
+      if (await permission.isIgnoringBatteryOptimizations()) {
+        await prefs.setBool(key, true);
+        return;
+      }
+      if (!mounted) return;
+
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Để thông báo nổ đúng giờ'),
+          content: const SingleChildScrollView(
+            child: Text(
+              'Trên một số máy (Nubia/MyOS, Xiaomi/HyperOS, Oppo…), khi bạn '
+              'VUỐT TẮT app khỏi danh sách gần đây, hệ điều hành sẽ dừng app và '
+              'HỦY mọi thông báo hẹn giờ (bản tin, nhắc ghi chú, cảnh báo mưa).\n\n'
+              'Để KatoCast báo đúng giờ kể cả sau khi vuốt tắt, hãy:\n'
+              '1) Bật "Tự khởi động" (Autostart) cho KatoCast.\n'
+              '2) Đặt pin ở chế độ "Không giới hạn".',
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Để sau'),
+            ),
+            TextButton(
+              onPressed: () => permission.requestIgnoreBatteryOptimizations(),
+              child: const Text('Bỏ giới hạn pin'),
+            ),
+            FilledButton(
+              onPressed: () => permission.openAutoStartSettings(),
+              child: const Text('Mở Tự khởi động'),
+            ),
+          ],
+        ),
+      );
+      await prefs.setBool(key, true);
     } catch (_) {}
   }
 

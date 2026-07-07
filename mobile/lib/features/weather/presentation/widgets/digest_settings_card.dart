@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/di/providers.dart';
 import '../../../../core/notifications/notification_service.dart';
+import '../../../alerts/data/digest_scheduler.dart';
 import '../../../alerts/domain/usecases/build_daily_digest.dart';
 import '../../../alerts/presentation/providers/notification_settings_provider.dart';
 import '../providers/weather_provider.dart';
@@ -129,9 +130,45 @@ class _DigestSettingsCardState extends ConsumerState<DigestSettingsCard> {
               ),
             ),
           ),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(8, 0, 8, 4),
+              child: TextButton.icon(
+                icon: const Icon(Icons.timer_outlined),
+                label: const Text('Đặt bản tin thử sau 1 phút (test chạy nền)'),
+                onPressed: () => _sendScheduledTest(context),
+              ),
+            ),
+          ),
+          const Padding(
+            padding: EdgeInsets.fromLTRB(16, 0, 16, 12),
+            child: Text(
+              'Mẹo chẩn đoán: bấm nút trên rồi KHÓA màn hình ~1 phút — nếu nổ là '
+              'lập lịch chạy nền OK. Nếu bạn VUỐT TẮT app rồi không nổ → hãy bật '
+              '"Tự khởi động" + đặt pin "Không giới hạn" trong Cài đặt.',
+              style: TextStyle(fontSize: 12),
+            ),
+          ),
         ],
       ),
     );
+  }
+
+  Future<void> _sendScheduledTest(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await scheduleDigestTest();
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Đã đặt bản tin thử sau 1 phút. Khóa màn hình và chờ.'),
+        ),
+      );
+    } catch (_) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Không đặt được lịch thử trên máy này.')),
+      );
+    }
   }
 
   Future<void> _sendTest(BuildContext context, WidgetRef ref) async {

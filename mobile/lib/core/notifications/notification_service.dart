@@ -206,4 +206,8 @@ class NotificationIds {
   /// [1100, 1100 + AppConfig.digestMaxSlots) nằm dưới dải ghi chú (10000+) nên
   /// không đụng. Số mốc tối đa xem `AppConfig.digestMaxSlots`.
   static const int digestBase = 1100;
+
+  /// Bản tin THỬ (tự chẩn đoán chạy nền). Nằm DƯỚI `digestBase` nên khi callback
+  /// tính `index = id - digestBase < 0` → không re-arm (bắn đúng một lần).
+  static const int digestTest = 1099;
 }

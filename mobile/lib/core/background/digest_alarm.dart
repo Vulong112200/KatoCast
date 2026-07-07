@@ -27,7 +27,27 @@ import 'background_location.dart';
 /// thị vì thiếu vị trí/offline), trừ khi bản tin đã tắt hoặc mốc đã bị xóa.
 @pragma('vm:entry-point')
 void digestAlarmCallback(int id) {
+  if (id == NotificationIds.digestTest) {
+    _runDigestTest();
+    return;
+  }
   _runDigest(id);
+}
+
+/// Bản tin THỬ: chỉ hiển thị một thông báo xác nhận (KHÔNG fetch thời tiết,
+/// KHÔNG re-arm, KHÔNG phụ thuộc bản tin bật/tắt) → cô lập đúng khâu giao alarm
+/// nền để người dùng tự chẩn đoán force-stop.
+Future<void> _runDigestTest() async {
+  try {
+    final notif = NotificationService();
+    await notif.init();
+    await notif.show(
+      id: NotificationIds.digestTest,
+      title: '✅ Thông báo nền hoạt động',
+      body: 'Bản tin thử đã nổ đúng giờ. Nếu bạn VUỐT TẮT app mà thông báo này '
+          'KHÔNG xuất hiện, hãy bật "Tự khởi động" + đặt pin "Không giới hạn".',
+    );
+  } catch (_) {}
 }
 
 Future<void> _runDigest(int id) async {

@@ -1,3 +1,4 @@
+import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart' as ph;
 
@@ -84,6 +85,23 @@ class PermissionService {
     } catch (_) {
       return false;
     }
+  }
+
+  /// Kênh native mở trang cài đặt riêng của hãng (MainActivity.kt).
+  static const _oemChannel = MethodChannel('katocast/oem');
+
+  /// Mở trang "Tự khởi động / Autostart" của hãng để app sống sót khi vuốt tắt
+  /// trên OEM diệt tiến trình mạnh (Nubia/MyOS, Xiaomi, Oppo…). Nếu không tìm
+  /// được trang hãng → fallback mở trang App Info tiêu chuẩn để người dùng tự
+  /// tìm mục Tự khởi động / Pin.
+  Future<void> openAutoStartSettings() async {
+    try {
+      final ok = await _oemChannel.invokeMethod<bool>('openAutoStart');
+      if (ok == true) return;
+    } catch (_) {
+      // Không có kênh/không hỗ trợ → fallback bên dưới.
+    }
+    await openSettings();
   }
 
   /// Mở màn hình cài đặt app (khi quyền bị từ chối vĩnh viễn).
