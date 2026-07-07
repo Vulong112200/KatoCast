@@ -54,9 +54,14 @@ class NotificationSettingsController extends StateNotifier<DigestPrefs> {
   }
 
   /// Lập lịch lại alarm theo cài đặt mới. Nội dung không bake ở đây — callback
-  /// alarm tự fetch tươi lúc bắn.
+  /// alarm tự fetch tươi lúc bắn. Bọc try để lỗi lập lịch (vd plugin/OEM) KHÔNG
+  /// làm crash UI hay chặn việc đã lưu cài đặt — state + store vẫn giữ nguyên.
   Future<void> _reschedule() async {
-    await scheduleDigests(state);
+    try {
+      await scheduleDigests(state);
+    } catch (e) {
+      debugPrint('KatoCast: scheduleDigests lỗi: $e');
+    }
   }
 }
 

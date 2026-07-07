@@ -85,6 +85,28 @@
             android:name="com.pravera.flutter_foreground_task.service.ForegroundService"
             android:foregroundServiceType="dataSync"
             android:exported="false" />
+
+        <!-- android_alarm_manager_plus (4.0.x có manifest RỖNG → APP PHẢI tự khai
+             báo). THIẾU các thành phần này → oneShotAt(rescheduleOnReboot:true)
+             ném "Component ... RebootBroadcastReceiver does not exist" khiến MỌI
+             alarm (bản tin/backstop/test) không đặt được. Đây là bug khiến "đến
+             giờ không nổ". RebootBroadcastReceiver để enabled=false — plugin tự
+             bật runtime khi rescheduleOnReboot. -->
+        <service
+            android:name="dev.fluttercommunity.plus.androidalarmmanager.AlarmService"
+            android:permission="android.permission.BIND_JOB_SERVICE"
+            android:exported="false" />
+        <receiver
+            android:name="dev.fluttercommunity.plus.androidalarmmanager.AlarmBroadcastReceiver"
+            android:exported="false" />
+        <receiver
+            android:name="dev.fluttercommunity.plus.androidalarmmanager.RebootBroadcastReceiver"
+            android:enabled="false"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and
