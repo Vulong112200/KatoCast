@@ -86,7 +86,12 @@ class BuildDailyDigest {
       case RainPhase.rainStartingSoon:
         final n = rain.minutesUntilChange;
         final end = rain.rainEndsAt;
-        final until = end != null ? ' kéo dài đến khoảng ${_clock(end)}' : '';
+        // Có diễn biến nhiều đoạn → mô tả từng đoạn cường độ thay vì một
+        // khung giờ dài gây hiểu lầm mưa to suốt.
+        final course = describeRainCourse(rain.segments);
+        final until = course != null
+            ? ' — diễn biến: $course'
+            : (end != null ? ' kéo dài đến khoảng ${_clock(end)}' : '');
         return at != null && n != null
             ? 'Dự kiến mưa lúc ${_clock(at)} (khoảng $n phút tới)$chance$until.'
             : 'Sắp có mưa$chance$until.';

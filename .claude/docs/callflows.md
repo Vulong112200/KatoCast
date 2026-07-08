@@ -115,13 +115,20 @@ runWeatherCheck (core/background/weather_check.dart):
    ▼  GUARD QUOTA bám chu kỳ: getCachedWeather → cache tươi hơn (intervalMinutes−1') → DÙNG CACHE,
    │  KHÔNG gọi API; ngược lại getWeather (luôn gọi remote khi online)
    ▼  (data.age > 45' → BỎ sinh cảnh báo, nhảy tới bước lập lịch digest)
-AnalyzeRain(now) [changeAt + rainEndsAt/duration + probabilityPct] + DetectEnvChange
+AnalyzeRain(now) [KẾT HỢP 3 NGUỒN: quan trắc current ĐÈ nowcast khi trời đã mưa (_obsIndicatesRain);
+   │ nowcast khô vẫn đối chiếu hourly (tín hiệu mạnh mm+pop≥0.6 trong cửa sổ / tiêu chí thường ngoài cửa sổ)
+   │ → changeAt + rainEndsAt/duration (nối tiếp hourly khi vượt cửa sổ nowcast) + segments (đoạn cường độ)
+   │ + probabilityPct] + DetectEnvChange
    ▼
-BuildWeatherAlerts(rain, env, previousPhase + previousChangeAt từ AlertStateStore)
-   │ chỉ sinh alert khi PHA đổi; NGOẠI LỆ: changeAt lệch ≥15' → "Cập nhật:" (cùng ID)
+BuildWeatherAlerts(rain, env, previousPhase + previousChangeAt + previousNotifiedAt từ AlertStateStore)
+   │ chỉ sinh alert khi PHA đổi; NGOẠI LỆ khi pha giữ nguyên:
+   │  (a) changeAt lệch so lần ĐÃ BÁO: SỚM ≥15' / MUỘN ≥45' (bất đối xứng) → "Cập nhật:" (cùng ID)
+   │  (b) đã báo từ XA (>35'), onset áp sát còn ≤35' → nhắc "Sắp mưa: còn ~N phút" (một lần)
    │ nội dung mưa: giờ bắt đầu (HH:MM từ changeAt) + % + giờ tạnh/thời lượng (rainEndsAt)
+   │  + "Diễn biến: mưa vừa ~17:00–19:00, sau đó mưa nhỏ..." (describeRainCourse khi ≥2 đoạn)
    ▼
-NotificationService.show(id cố định) → AlertStateStore.write(phase + changeAt mới)
+NotificationService.show(id cố định) → AlertStateStore.write(phase + changeAt/notifiedAt —
+   │ CHỈ chốt mốc mới khi thật sự phát thông báo mưa, tránh drift nuốt ngưỡng "Cập nhật")
    ▼ (foreground service còn updateService: thông báo thường trực live nhiệt độ + tình hình)
 NotificationPrefsStore.read() → scheduleDigests(prefs)  [re-arm mọi mốc digest mỗi chu kỳ]
 ```

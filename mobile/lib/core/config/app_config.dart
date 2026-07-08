@@ -46,10 +46,34 @@ class AppConfig {
   /// vì cảnh báo tức thời cần chắc chắn hơn để tránh báo nhầm.
   static const double rainAlertPopThreshold = 0.5;
 
-  /// Độ lệch (phút) giữa thời điểm chuyển biến ĐÃ BÁO và dự báo mới đủ lớn để
-  /// gửi thông báo cập nhật lại dù pha mưa không đổi (vd đã báo "mưa 15:30",
-  /// dự báo mới nói 14:20 → cần báo lại).
+  /// Độ lệch (phút) khi mưa đến SỚM hơn thời điểm ĐÃ BÁO đủ lớn để gửi thông
+  /// báo cập nhật dù pha mưa không đổi (vd đã báo "mưa 15:30", dự báo mới nói
+  /// 14:20 → cần báo lại ngay vì người dùng có thể ra đường trễ hơn dự tính).
   static const int rainTimeShiftRenotifyMinutes = 15;
+
+  /// Độ lệch (phút) khi mưa DỜI MUỘN hơn thời điểm đã báo — ngưỡng CAO hơn
+  /// chiều sớm vì dự báo giờ hay "trôi" dần về sau; báo lại mỗi lần trôi 15'
+  /// sẽ thành spam "Cập nhật" cả buổi trong mùa mưa.
+  static const int rainTimeShiftLaterRenotifyMinutes = 45;
+
+  /// Khi đã cảnh báo "sắp mưa" TỪ XA (trên ngưỡng này), lúc cơn mưa áp sát
+  /// còn ≤ ngưỡng này (phút) sẽ gửi thêm MỘT thông báo nhắc lại — trả lời nhu
+  /// cầu "báo trước ~30 phút" kể cả khi cảnh báo đầu bắn từ 2 tiếng trước.
+  static const int rainReminderLeadMinutes = 35;
+
+  /// Quan trắc thời tiết hiện tại (`current`) cũ hơn ngưỡng này (phút) so với
+  /// thời điểm phân tích thì KHÔNG dùng để khẳng định "đang mưa".
+  static const int rainObsMaxAgeMinutes = 30;
+
+  /// Lượng mưa quan trắc 1h gần nhất (mm) đủ lớn để coi là "đang mưa" kể cả
+  /// khi mã điều kiện chưa chuyển sang nhóm mưa (cao hơn ngưỡng lọc nhiễu vì
+  /// rain1h là số tích lũy, có thể còn dư sau khi mưa vừa tạnh).
+  static const double rainObsMm1hThreshold = 0.5;
+
+  /// Ngưỡng pop để một giờ hourly được tin là "chắc chắn mưa" khi nó MÂU THUẪN
+  /// với nowcast (nowcast bảo khô). Nowcast ở VN hay bỏ sót mưa nên hourly có
+  /// lượng mưa cụ thể + pop ≥ ngưỡng này vẫn được dùng để cảnh báo sớm.
+  static const double rainConfidentPopThreshold = 0.6;
 
   /// Floor xác suất (%) khi nowcast minutely đã XÁC NHẬN đang mưa / sắp mưa —
   /// tránh mâu thuẫn kiểu "Trời đang mưa. Khả năng mưa khoảng 40%."

@@ -39,7 +39,7 @@ class RainAlertBanner extends StatelessWidget {
         return (
           Colors.blue,
           Icons.umbrella,
-          'Dự kiến mưa ${_timing()}.${_chance()} '
+          'Dự kiến mưa ${_timing()}.${_chance()}${_course()} '
               'Chuẩn bị áo mưa và chú ý đường trơn trượt.',
         );
       case RainPhase.raining:
@@ -74,5 +74,12 @@ class RainAlertBanner extends StatelessWidget {
     final pct = status.probabilityPct;
     if (pct == null) return '';
     return raining ? ' Khả năng còn mưa ~$pct%.' : ' Khả năng mưa ~$pct%.';
+  }
+
+  /// Diễn biến theo đoạn cường độ (khớp nội dung notification); rỗng nếu cơn
+  /// mưa đồng nhất (một đoạn) — khi đó giờ tạnh đã nằm trong AdvisoryCard.
+  String _course() {
+    final course = describeRainCourse(status.segments);
+    return course != null ? ' Diễn biến: $course.' : '';
   }
 }

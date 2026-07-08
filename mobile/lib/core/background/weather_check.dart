@@ -91,6 +91,7 @@ Future<WeatherData?> runWeatherCheck() async {
           previousPhase: prev.phase,
           previousCategory: prev.category,
           previousChangeAt: prev.changeAt,
+          previousNotifiedAt: prev.notifiedAt,
           envAlreadyNotified: prev.envNotified,
         );
 
@@ -106,6 +107,7 @@ Future<WeatherData?> runWeatherCheck() async {
           phase: out.newPhase,
           category: out.newCategory,
           changeAt: out.newChangeAt,
+          notifiedAt: out.newNotifiedAt,
           envNotified: out.envNotified,
         );
       }
