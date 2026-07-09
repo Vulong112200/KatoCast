@@ -59,7 +59,10 @@ void callbackDispatcher() {
       await _reassertNotes();
     } catch (_) {}
     try {
-      await runWeatherCheck();
+      // Ngoài khung giờ hoạt động → bỏ qua lấy dữ liệu (mát máy, tiết kiệm quota).
+      if (await isWithinActiveHours(DateTime.now())) {
+        await runWeatherCheck();
+      }
     } catch (_) {
       // Nuốt lỗi để WorkManager không retry dồn dập; lần sau sẽ check lại.
     }

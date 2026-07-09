@@ -8,16 +8,31 @@ import '../../../../core/config/app_config.dart';
 class BackgroundSettings {
   final bool foregroundEnabled;
   final int intervalMinutes;
+  final bool activeAllDay;
+  final int activeStartMinutes;
+  final int activeEndMinutes;
 
   const BackgroundSettings({
     required this.foregroundEnabled,
     required this.intervalMinutes,
+    required this.activeAllDay,
+    required this.activeStartMinutes,
+    required this.activeEndMinutes,
   });
 
-  BackgroundSettings copyWith({bool? foregroundEnabled, int? intervalMinutes}) {
+  BackgroundSettings copyWith({
+    bool? foregroundEnabled,
+    int? intervalMinutes,
+    bool? activeAllDay,
+    int? activeStartMinutes,
+    int? activeEndMinutes,
+  }) {
     return BackgroundSettings(
       foregroundEnabled: foregroundEnabled ?? this.foregroundEnabled,
       intervalMinutes: intervalMinutes ?? this.intervalMinutes,
+      activeAllDay: activeAllDay ?? this.activeAllDay,
+      activeStartMinutes: activeStartMinutes ?? this.activeStartMinutes,
+      activeEndMinutes: activeEndMinutes ?? this.activeEndMinutes,
     );
   }
 }
@@ -29,6 +44,9 @@ class BackgroundSettingsController extends StateNotifier<BackgroundSettings> {
       : super(const BackgroundSettings(
           foregroundEnabled: true,
           intervalMinutes: AppConfig.backgroundIntervalMinutes,
+          activeAllDay: AppConfig.activeHoursAllDayDefault,
+          activeStartMinutes: AppConfig.activeHoursStartDefault,
+          activeEndMinutes: AppConfig.activeHoursEndDefault,
         )) {
     _load();
   }
@@ -39,6 +57,9 @@ class BackgroundSettingsController extends StateNotifier<BackgroundSettings> {
     state = BackgroundSettings(
       foregroundEnabled: await _store.foregroundEnabled(),
       intervalMinutes: await _store.intervalMinutes(),
+      activeAllDay: await _store.activeAllDay(),
+      activeStartMinutes: await _store.activeStartMinutes(),
+      activeEndMinutes: await _store.activeEndMinutes(),
     );
   }
 
@@ -52,6 +73,25 @@ class BackgroundSettingsController extends StateNotifier<BackgroundSettings> {
     state = state.copyWith(intervalMinutes: minutes);
     await _store.setIntervalMinutes(minutes);
     // Áp chu kỳ mới: restart foreground service / re-arm alarm với interval mới.
+    await applyBackgroundTriggers();
+  }
+
+  Future<void> setActiveAllDay(bool value) async {
+    state = state.copyWith(activeAllDay: value);
+    await _store.setActiveAllDay(value);
+    // Re-arm để alarm backstop neo lại mốc kế tiếp theo khung mới ngay.
+    await applyBackgroundTriggers();
+  }
+
+  Future<void> setActiveStartMinutes(int minutes) async {
+    state = state.copyWith(activeStartMinutes: minutes);
+    await _store.setActiveStartMinutes(minutes);
+    await applyBackgroundTriggers();
+  }
+
+  Future<void> setActiveEndMinutes(int minutes) async {
+    state = state.copyWith(activeEndMinutes: minutes);
+    await _store.setActiveEndMinutes(minutes);
     await applyBackgroundTriggers();
   }
 }

@@ -5,6 +5,8 @@ import '../../../core/config/app_config.dart';
 import '../../../core/di/providers.dart';
 import '../../../core/theme/theme_controller.dart';
 import '../../../core/theme/theme_palettes.dart';
+import '../../alerts/presentation/providers/notification_settings_provider.dart'
+    show minutesToTimeOfDay;
 import 'providers/background_settings_provider.dart';
 
 /// Màn hình cài đặt: giao diện (theme), thông báo, chạy nền & pin, giới thiệu.
@@ -135,6 +137,7 @@ class SettingsScreen extends ConsumerWidget {
                 .setForegroundEnabled(v),
           ),
           const _IntervalSetting(),
+          const _ActiveHoursSetting(),
           ListTile(
             leading: const Icon(Icons.battery_saver_outlined),
             title: const Text('Bỏ giới hạn pin cho KatoCast'),
@@ -363,6 +366,84 @@ class _IntervalSetting extends ConsumerWidget {
             'máy hơn và tiêu hạn mức API nhanh (mỗi lần làm mới = 3 lượt gọi; '
             '5\' ≈ 860 lượt/ngày, gần trần 1000/ngày). Khi tắt "Theo dõi liên '
             'tục", hệ thống cập nhật tối thiểu mỗi 15\'.',
+            style: TextStyle(fontSize: 12),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Khung giờ hoạt động: cả ngày (24/7) hoặc giới hạn giờ bắt đầu→kết thúc.
+/// Ngoài khung, app tạm ngủ (không lấy dữ liệu) để tiết kiệm pin/hạn mức API;
+/// alarm backstop tự thức lại đúng giờ mở khung. Bản tin hằng ngày KHÔNG bị
+/// chặn — vẫn nổ đúng mốc đã đặt.
+class _ActiveHoursSetting extends ConsumerWidget {
+  const _ActiveHoursSetting();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final s = ref.watch(backgroundSettingsProvider);
+    final controller = ref.read(backgroundSettingsProvider.notifier);
+
+    Future<void> pick(int currentMinutes, ValueChanged<int> onPicked) async {
+      final picked = await showTimePicker(
+        context: context,
+        initialTime: minutesToTimeOfDay(currentMinutes),
+      );
+      if (picked != null) onPicked(picked.hour * 60 + picked.minute);
+    }
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SwitchListTile(
+          secondary: const Icon(Icons.schedule_outlined),
+          title: const Text('Hoạt động cả ngày (24/7)'),
+          subtitle: const Text(
+            'Bật: theo dõi suốt ngày đêm. Tắt: chỉ hoạt động trong khung giờ '
+            'bên dưới — ngoài khung app tạm ngủ để mát máy & tiết kiệm hạn mức, '
+            'tự thức lại vào giờ bắt đầu.',
+          ),
+          value: s.activeAllDay,
+          onChanged: controller.setActiveAllDay,
+        ),
+        Opacity(
+          opacity: s.activeAllDay ? 0.4 : 1.0,
+          child: IgnorePointer(
+            ignoring: s.activeAllDay,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.wb_twilight_outlined),
+                  title: const Text('Bắt đầu'),
+                  trailing: Text(
+                    minutesToTimeOfDay(s.activeStartMinutes).format(context),
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  onTap: () => pick(
+                      s.activeStartMinutes, controller.setActiveStartMinutes),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.nightlight_outlined),
+                  title: const Text('Kết thúc'),
+                  trailing: Text(
+                    minutesToTimeOfDay(s.activeEndMinutes).format(context),
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  onTap: () =>
+                      pick(s.activeEndMinutes, controller.setActiveEndMinutes),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const Padding(
+          padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
+          child: Text(
+            'Bản tin hằng ngày vẫn nổ đúng giờ bạn đặt, kể cả ngoài khung này.',
             style: TextStyle(fontSize: 12),
           ),
         ),

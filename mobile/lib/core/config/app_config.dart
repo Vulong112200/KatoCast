@@ -96,6 +96,23 @@ class AppConfig {
   /// thời hơn nhưng tốn pin/nhiệt và tiêu hạn mức API nhanh hơn (3 call/refresh).
   static const List<int> backgroundIntervalOptions = [5, 10, 15, 30];
 
+  /// --- Khung giờ hoạt động (Active Hours) ---
+  /// Ngoài khung giờ này, các lớp trigger nền BỎ QUA việc lấy dữ liệu (mát máy,
+  /// tiết kiệm hạn mức API) và alarm exact backstop re-arm đúng vào giờ MỞ khung
+  /// thay vì đá CPU dậy mỗi chu kỳ suốt đêm. Bản tin hằng ngày KHÔNG bị chặn bởi
+  /// khung giờ (alarm digest riêng, tự làm mới lúc bắn).
+  ///
+  /// Mặc định BẬT giới hạn giờ (không phải cả ngày) để tránh chạy nền vô ích ban
+  /// đêm khi người dùng ngủ.
+  static const bool activeHoursAllDayDefault = false;
+
+  /// Giờ MỞ khung mặc định (phút-trong-ngày). 300 = 5:00 — kịp làm mới trước
+  /// bản tin sáng 6:30.
+  static const int activeHoursStartDefault = 5 * 60;
+
+  /// Giờ ĐÓNG khung mặc định (phút-trong-ngày). 1260 = 21:00.
+  static const int activeHoursEndDefault = 21 * 60;
+
   /// Ngưỡng thay đổi nhiệt độ mạnh giữa hiện tại và vài giờ tới (°C).
   static const double strongTempDeltaC = 5.0;
 

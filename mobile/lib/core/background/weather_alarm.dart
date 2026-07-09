@@ -16,10 +16,21 @@ const int kWeatherAlarmId = 2001;
 /// Triggers` trong main.dart) để tránh 2 lớp cùng đá máy dậy gây nóng.
 ///
 /// One-shot không tự lặp nên [weatherAlarmCallback] phải re-arm mốc kế tiếp.
+///
+/// Neo mốc kế tiếp theo KHUNG GIỜ HOẠT ĐỘNG: nếu hiện đang TRONG khung → chu kỳ
+/// bình thường (`now + interval`); nếu NGOÀI khung → nhảy thẳng tới giờ MỞ khung
+/// kế tiếp (ví dụ 5:00 sáng) để không đá CPU dậy vô ích suốt đêm.
 Future<void> scheduleWeatherAlarm() async {
-  final interval = await BackgroundPrefsStore().intervalMinutes();
+  final now = DateTime.now();
+  final DateTime fireAt;
+  if (await isWithinActiveHours(now)) {
+    final interval = await BackgroundPrefsStore().intervalMinutes();
+    fireAt = now.add(Duration(minutes: interval));
+  } else {
+    fireAt = await nextActiveWindowStart(now);
+  }
   await AndroidAlarmManager.oneShotAt(
-    DateTime.now().add(Duration(minutes: interval)),
+    fireAt,
     kWeatherAlarmId,
     weatherAlarmCallback,
     exact: true,
@@ -42,8 +53,12 @@ Future<void> _run() async {
   try {
     await _reassertNotes();
   } catch (_) {}
+  // Ngoài khung giờ hoạt động → KHÔNG lấy dữ liệu (mát máy, tiết kiệm quota).
+  // Vẫn re-arm bên dưới, và mốc kế tiếp sẽ neo vào giờ mở khung.
   try {
-    await runWeatherCheck();
+    if (await isWithinActiveHours(DateTime.now())) {
+      await runWeatherCheck();
+    }
   } catch (_) {}
   // Re-arm cho chu kỳ kế tiếp (one-shot không tự lặp). Alarm exact là BACKSTOP
   // thường trực (chạy cả khi FG bật) → luôn tự re-arm. Guard quota trong

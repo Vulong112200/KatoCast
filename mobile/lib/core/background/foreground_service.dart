@@ -43,6 +43,10 @@ class _WeatherTaskHandler extends TaskHandler {
     try {
       await _reassertNotes();
     } catch (_) {}
+    // Ngoài khung giờ hoạt động → GIỮ thông báo thường trực nhưng KHÔNG lấy dữ
+    // liệu / không cập nhật (mát máy, tiết kiệm quota). Đến giờ mở khung, tick
+    // kế tiếp tự cập nhật lại.
+    if (!await isWithinActiveHours(DateTime.now())) return;
     try {
       final data = await runWeatherCheck();
       if (data != null) {

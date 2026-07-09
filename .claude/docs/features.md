@@ -96,7 +96,7 @@
 | `currentPlaceProvider` | FutureProvider | location | `currentLocationProvider` + `locationRepositoryProvider` (Nominatim → fallback geocoding) |
 | `themeControllerProvider` | StateNotifierProvider | theme | SharedPreferences; UI Settings + `main.dart` |
 | `notificationSettingsProvider` | StateNotifierProvider | alerts (digest) | `NotificationPrefsStore` (SharedPreferences); state `DigestPrefs {enabled, List<int> times}`; UI `DigestSettingsCard` ở màn Weather → add/remove/updateTime + `scheduleDigests` |
-| `backgroundSettingsProvider` | StateNotifierProvider | background (FG + chu kỳ) | `BackgroundPrefsStore`; state `BackgroundSettings {foregroundEnabled, intervalMinutes}`; UI Settings → `applyBackgroundTriggers` (start/stop FG, hủy/đặt alarm+WorkManager) |
+| `backgroundSettingsProvider` | StateNotifierProvider | background (FG + chu kỳ + khung giờ) | `BackgroundPrefsStore`; state `BackgroundSettings {foregroundEnabled, intervalMinutes, activeAllDay, activeStartMinutes, activeEndMinutes}`; UI Settings → `applyBackgroundTriggers` (start/stop FG, hủy/đặt alarm+WorkManager, re-arm alarm theo khung giờ mới) |
 | `routeControllerProvider` | StateNotifierProvider | fixed_route | `poiRepositoryProvider` (Drift + Overpass) |
 | `notesControllerProvider` | StateNotifierProvider | notes | `noteLocalDataSourceProvider` (Drift) + `noteNotificationServiceProvider` |
 | `poiRepositoryProvider` | Provider (DI) | fixed_route | `routeLocalDataSourceProvider` + `overpassDataSourceProvider` |
