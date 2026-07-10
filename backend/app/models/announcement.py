@@ -25,3 +25,6 @@ class Announcement(Base):
     content_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     verified: Mapped[bool] = mapped_column(Boolean, default=False)
     score: Mapped[float] = mapped_column(Float, default=0.0)  # độ khớp chủ đề 0..1
+    # ngày regex tự phát hiện trong tin (JSON list [{date, label, raw}]) — GỢI Ý,
+    # chưa kiểm chứng. Lịch chuẩn nằm ở exam_events.
+    extracted_dates: Mapped[str | None] = mapped_column(Text, nullable=True)

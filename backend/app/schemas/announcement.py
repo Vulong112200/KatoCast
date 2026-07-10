@@ -1,8 +1,15 @@
 """Pydantic v2 DTO cho Announcement & WatchSource."""
 
+import json
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
+
+
+class ExtractedDate(BaseModel):
+    date: str          # ISO YYYY-MM-DD
+    label: str         # registration | exam | deadline | result | unknown
+    raw: str = ""
 
 
 class AnnouncementRead(BaseModel):
@@ -19,6 +26,20 @@ class AnnouncementRead(BaseModel):
     content_hash: str
     verified: bool
     score: float
+    # ngày tự phát hiện (chưa kiểm chứng); DB lưu JSON string → parse thành list
+    extracted_dates: list[ExtractedDate] = []
+
+    @field_validator("extracted_dates", mode="before")
+    @classmethod
+    def _parse_extracted(cls, v):
+        if v is None or v == "":
+            return []
+        if isinstance(v, str):
+            try:
+                return json.loads(v)
+            except (ValueError, TypeError):
+                return []
+        return v
 
 
 class WatchSourceCreate(BaseModel):

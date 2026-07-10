@@ -7,6 +7,7 @@ URL nguồn nên notification luôn kèm domain kiểm chứng được.
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 from urllib.parse import urljoin, urlparse
 
@@ -20,7 +21,7 @@ from app.repositories.announcement_repo import (
     AnnouncementRepository,
     WatchSourceRepository,
 )
-from app.services import verify_service
+from app.services import date_extract, verify_service
 
 
 def _normalize(text: str) -> str:
@@ -85,6 +86,7 @@ async def crawl_source(
         )
         if not result.matched:
             continue  # không khớp chủ đề → bỏ
+        dates = date_extract.extract_dates(item.text)
         ann = Announcement(
             topic=source.topic,
             title=item.title[:512],
@@ -94,6 +96,7 @@ async def crawl_source(
             content_hash=content_hash,
             verified=result.score >= 0.5,
             score=result.score,
+            extracted_dates=json.dumps(dates, ensure_ascii=False) if dates else None,
         )
         await ann_repo.create(ann)
         created.append(ann)

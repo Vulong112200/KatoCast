@@ -18,7 +18,7 @@ services:
     dockerfilePath: ./Dockerfile
     healthCheckPath: /health
     # Chạy migrate + seed nguồn TRƯỚC mỗi lần deploy (idempotent)
-    preDeployCommand: "alembic upgrade head && python -m app.jobs.seed_sources"
+    preDeployCommand: "alembic upgrade head && python -m app.jobs.seed_sources && python -m app.jobs.seed_events"
     envVars:
       - key: DATABASE_URL
         fromDatabase:
