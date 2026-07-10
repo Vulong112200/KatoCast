@@ -21,13 +21,14 @@ backend/
 │   ├── models/                  # SQLAlchemy: announcement.py + watch_source.py (import gom ở __init__)
 │   ├── schemas/announcement.py  # Pydantic v2: AnnouncementRead, WatchSourceCreate/Read
 │   ├── db/                      # base.py (DeclarativeBase) · session.py (async engine + get_session)
-│   ├── core/config.py           # Settings (DATABASE_URL, ANTHROPIC_API_KEY, VERIFY_MODEL, CORS, UA)
+│   ├── core/config.py           # Settings (DATABASE_URL tự ép →asyncpg, ANTHROPIC_API_KEY, VERIFY_MODEL, CORS, UA)
 │   └── jobs/
 │       ├── daily_crawl.py       # cron entrypoint: python -m app.jobs.daily_crawl [topic]
 │       └── seed_sources.py      # nạp whitelist nguồn JLPT chính thức (MBA: cấu hình thêm)
 ├── alembic/ (env.py + versions/0001_initial.py)  # migrations (announcements + watch_sources)
 ├── tests/test_crawl_service.py  # test diff/dedup với HTML fixture (không mạng)
 ├── requirements.txt · pytest.ini · alembic.ini · .env.example · README.md
+└── Dockerfile · .dockerignore · render.yaml  # deploy Render (Blueprint: Postgres+web+cron; preDeploy: alembic upgrade+seed)
 ```
 
 ## Mobile (`mobile/`)

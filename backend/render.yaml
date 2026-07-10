@@ -1,0 +1,55 @@
+# Render Blueprint — deploy 1 phát: web service + Postgres + cron crawl.
+# Dùng: đẩy repo lên GitHub → Render Dashboard → New → Blueprint → chọn repo.
+# Mọi service dưới đây có rootDir=backend nên trỏ đúng thư mục backend/.
+
+databases:
+  - name: katoassistant-db
+    plan: free            # đủ cho v1; nâng lên starter khi cần
+    databaseName: katoassistant
+    user: katoassistant
+
+services:
+  # --- Web API (FastAPI/uvicorn) ---
+  - type: web
+    name: katoassistant-api
+    runtime: docker
+    plan: free
+    rootDir: backend
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    # Chạy migrate + seed nguồn TRƯỚC mỗi lần deploy (idempotent)
+    preDeployCommand: "alembic upgrade head && python -m app.jobs.seed_sources"
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: katoassistant-db
+          property: connectionString
+      - key: ANTHROPIC_API_KEY
+        sync: false        # nhập tay trong dashboard (secret)
+      - key: VERIFY_MODEL
+        value: claude-haiku-4-5-20251001
+      - key: CORS_ORIGINS
+        value: "*"         # app mobile gọi trực tiếp; siết lại nếu có web origin
+      - key: CRAWL_USER_AGENT
+        value: "KatoAssistant/1.0 (+https://github.com/VuhpAlx)"
+
+  # --- Cron: crawl mọi nguồn 1 lần/ngày (03:00 UTC ~ 10:00 giờ VN) ---
+  - type: cron
+    name: katoassistant-daily-crawl
+    runtime: docker
+    plan: free
+    rootDir: backend
+    dockerfilePath: ./Dockerfile
+    schedule: "0 3 * * *"
+    dockerCommand: "python -m app.jobs.daily_crawl"
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: katoassistant-db
+          property: connectionString
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: VERIFY_MODEL
+        value: claude-haiku-4-5-20251001
+      - key: CRAWL_USER_AGENT
+        value: "KatoAssistant/1.0 (+https://github.com/VuhpAlx)"
