@@ -35,25 +35,32 @@ class BuildAdvisories {
     }
 
     // 2. UV theo mức (chỉ nhắc khi từ trung bình trở lên để tránh thừa).
-    final uv = UvAdvice.classify(current.uvi);
-    if (uv.needsProtection) {
-      items.add(Advisory(
-          AdvisoryKind.uv, 'UV ${uv.level} (${uv.label}): ${uv.advice}'));
+    final uvi = current.uvi;
+    if (uvi != null) {
+      final uv = UvAdvice.classify(uvi);
+      if (uv.needsProtection) {
+        items.add(Advisory(
+            AdvisoryKind.uv, 'UV ${uv.level} (${uv.label}): ${uv.advice}'));
+      }
     }
 
     // 3. Độ ẩm.
-    if (current.humidity >= AppConfig.humidityHighPct) {
-      items.add(const Advisory(AdvisoryKind.humidity,
-          'Độ ẩm cao, oi bức khó chịu — nhớ uống đủ nước.'));
-    } else if (current.humidity <= AppConfig.humidityLowPct) {
-      items.add(const Advisory(AdvisoryKind.humidity,
-          'Không khí khô — dưỡng ẩm da và uống nước thường xuyên.'));
+    final humidity = current.humidity;
+    if (humidity != null) {
+      if (humidity >= AppConfig.humidityHighPct) {
+        items.add(const Advisory(AdvisoryKind.humidity,
+            'Độ ẩm cao, oi bức khó chịu — nhớ uống đủ nước.'));
+      } else if (humidity <= AppConfig.humidityLowPct) {
+        items.add(const Advisory(AdvisoryKind.humidity,
+            'Không khí khô — dưỡng ẩm da và uống nước thường xuyên.'));
+      }
     }
 
     // 4. Gió mạnh.
-    if (current.windSpeed >= AppConfig.strongWindMs) {
+    final windSpeed = current.windSpeed;
+    if (windSpeed != null && windSpeed >= AppConfig.strongWindMs) {
       items.add(Advisory(AdvisoryKind.wind,
-          'Gió mạnh (${current.windSpeed.toStringAsFixed(0)} m/s), '
+          'Gió mạnh (${windSpeed.toStringAsFixed(0)} m/s), '
           'cẩn thận khi di chuyển ngoài trời.'));
     }
 

@@ -12,6 +12,10 @@ class HourlyForecast {
   final String description;
   final String icon;
 
+  /// Mã điều kiện OWM (weather[0].id) của giờ — để hiện icon/emoji tình hình
+  /// mỗi giờ; null nếu thiếu.
+  final int? conditionId;
+
   const HourlyForecast({
     required this.time,
     required this.tempC,
@@ -20,5 +24,6 @@ class HourlyForecast {
     required this.rainMm,
     required this.description,
     required this.icon,
+    this.conditionId,
   });
 }

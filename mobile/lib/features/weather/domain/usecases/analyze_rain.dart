@@ -61,7 +61,10 @@ class AnalyzeRain {
     final pct = _probabilityPct(
       hourly,
       eventTime: base.changeAt ?? ref,
-      minutelyConfirmed: base.fromMinutely,
+      // Chỉ ép sàn xác suất khi ĐANG mưa thực sự (quan trắc/nowcast xác nhận) —
+      // lúc đó "khả năng 30%" là vô lý. Với "sắp mưa" thì hiện pop THẬT của OWM
+      // để không thổi phồng con số (trước đây ép ≥80% cả khi mới sắp mưa).
+      floorProbability: base.phase == RainPhase.raining,
     );
     if (pct == null) return base;
     return RainStatus(
@@ -84,7 +87,8 @@ class AnalyzeRain {
       return false;
     }
     final id = current.conditionId;
-    final rainCondition = (id >= 200 && id < 400) || (id >= 500 && id < 600);
+    final rainCondition =
+        id != null && ((id >= 200 && id < 400) || (id >= 500 && id < 600));
     return rainCondition || current.rain1h >= AppConfig.rainObsMm1hThreshold;
   }
 
@@ -180,17 +184,21 @@ class AnalyzeRain {
     DateTime ref,
   ) {
     final changeAt = minutely[onsetIndex].time;
-    final minutelyEnd = _minutelyRainEnd(minutely, onsetIndex);
+    final endIndex = _minutelyRainEndIndex(minutely, onsetIndex);
+    final minutelyEnd = endIndex != null ? minutely[endIndex].time : null;
 
     List<RainSegment> segments;
     DateTime? endsAt = minutelyEnd;
-    if (minutelyEnd != null) {
+    if (endIndex != null) {
       // Cơn mưa nằm trọn trong cửa sổ nowcast → 1 đoạn, mốc chính xác phút.
+      // Chỉ quét cường độ trong [onsetIndex, endIndex) để một cơn mưa KHÁC ở
+      // cuối cửa sổ không thổi phồng cường độ đoạn này.
       segments = [
         RainSegment(
           start: changeAt,
           end: minutelyEnd,
-          intensity: _intensityOfMmH(_maxMinutelyRate(minutely, onsetIndex)),
+          intensity:
+              _intensityOfMmH(_maxMinutelyRate(minutely, onsetIndex, to: endIndex)),
         ),
       ];
     } else {
@@ -278,24 +286,27 @@ class AnalyzeRain {
     return true;
   }
 
-  /// Từ mốc bắt đầu mưa [rainStart], quét tiếp tìm mốc "khô bền vững" đầu tiên
-  /// → thời điểm cơn mưa tạnh. null nếu tới hết cửa sổ vẫn còn mưa (cơn mưa kéo
-  /// dài quá tầm dự báo ngắn — không khẳng định được giờ tạnh).
-  DateTime? _minutelyRainEnd(List<MinutelyForecast> minutely, int rainStart) {
+  /// Từ mốc bắt đầu mưa [rainStart], quét tiếp tìm CHỈ SỐ mốc "khô bền vững"
+  /// đầu tiên → thời điểm cơn mưa tạnh. null nếu tới hết cửa sổ vẫn còn mưa (cơn
+  /// mưa kéo dài quá tầm dự báo ngắn — không khẳng định được giờ tạnh).
+  int? _minutelyRainEndIndex(List<MinutelyForecast> minutely, int rainStart) {
     for (var i = rainStart + 1; i < minutely.length; i++) {
       if (minutely[i].precipitationMmH <= _threshold &&
           _isDrySustained(minutely, i)) {
-        return minutely[i].time;
+        return i;
       }
     }
     return null;
   }
 
-  /// Lượng mưa lớn nhất (mm/h) trong phần còn lại của nowcast từ [from] — dùng
-  /// phân cường độ cho đoạn mưa suy từ minutely (cửa sổ ngắn nên quét hết).
-  double _maxMinutelyRate(List<MinutelyForecast> minutely, int from) {
+  /// Lượng mưa lớn nhất (mm/h) trong khoảng [from, to) của nowcast — dùng phân
+  /// cường độ cho đoạn mưa suy từ minutely. [to] mặc định hết chuỗi; truyền chỉ
+  /// số kết thúc cơn mưa để KHÔNG tính lẫn cơn mưa khác ở phần sau cửa sổ.
+  double _maxMinutelyRate(List<MinutelyForecast> minutely, int from,
+      {int? to}) {
+    final end = to ?? minutely.length;
     var max = 0.0;
-    for (var i = from; i < minutely.length; i++) {
+    for (var i = from; i < end; i++) {
       if (minutely[i].precipitationMmH > max) max = minutely[i].precipitationMmH;
     }
     return max;
@@ -424,12 +435,13 @@ class AnalyzeRain {
   }
 
   /// Xác suất mưa (%) tại GIỜ CHỨA [eventTime] (so timestamp, không chia 60).
-  /// [minutelyConfirmed] = nowcast đã thấy mưa → floor xác suất để không mâu
-  /// thuẫn kiểu "đang mưa, khả năng 40%". null nếu không có nguồn nào.
+  /// [floorProbability] = ĐANG mưa → floor xác suất để không mâu thuẫn kiểu
+  /// "đang mưa, khả năng 40%". Với "sắp mưa" thì KHÔNG floor → trả pop thật.
+  /// null nếu không có nguồn nào.
   int? _probabilityPct(
     List<HourlyForecast> hourly, {
     required DateTime eventTime,
-    required bool minutelyConfirmed,
+    required bool floorProbability,
   }) {
     int? pct;
     for (final h in hourly) {
@@ -452,7 +464,7 @@ class AnalyzeRain {
       }
       pct = (nearest.pop * 100).round();
     }
-    if (minutelyConfirmed) {
+    if (floorProbability) {
       const floor = AppConfig.minutelyProbabilityFloorPct;
       pct = pct == null ? floor : math.max(pct, floor);
     }

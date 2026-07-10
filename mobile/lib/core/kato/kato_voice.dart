@@ -48,6 +48,13 @@ class KatoVoice {
         'Lông Kato dựng nhẹ — thời tiết đang đổi mạnh 🐈 ',
       ], seed);
 
+  /// Có tin mới về chủ đề đang theo dõi (kỳ thi/khoá học) — Kato "tha tin về".
+  static String announcement(int seed) => _pick(const [
+        'Kato tha tin mới về cho sen đây 🐾 ',
+        'Meo~ Kato hóng được tin mới nè 🐈 ',
+        'Kato mang tin sen đang chờ về đây 🐾 ',
+      ], seed);
+
   /// Câu chào mở đầu bản tin hằng ngày, phân biệt sáng/tối.
   static String digest({required bool morning, required int seed}) {
     return morning

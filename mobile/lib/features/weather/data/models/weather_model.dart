@@ -27,12 +27,17 @@ class WeatherMapper {
     final weather = _firstWeather(c['weather']);
     return CurrentWeather(
       time: _time(c['dt']),
-      tempC: _toDouble(c['temp']),
-      feelsLikeC: _toDouble(c['feels_like']),
-      humidity: _toInt(c['humidity']),
-      uvi: _toDouble(c['uvi']),
-      clouds: _toInt(c['clouds']),
-      windSpeed: _toDouble(c['wind_speed']),
+      tempC: _toDoubleOrNull(c['temp']),
+      feelsLikeC: _toDoubleOrNull(c['feels_like']),
+      humidity: _toIntOrNull(c['humidity']),
+      uvi: _toDoubleOrNull(c['uvi']),
+      clouds: _toIntOrNull(c['clouds']),
+      windSpeed: _toDoubleOrNull(c['wind_speed']),
+      windDeg: _toIntOrNull(c['wind_deg']),
+      windGust: _toDoubleOrNull(c['wind_gust']),
+      pressure: _toIntOrNull(c['pressure']),
+      dewPointC: _toDoubleOrNull(c['dew_point']),
+      visibilityM: _toIntOrNull(c['visibility']),
       conditionId: weather.$1,
       description: weather.$2,
       icon: weather.$3,
@@ -47,6 +52,7 @@ class WeatherMapper {
       return MinutelyForecast(
         time: _time(m['dt']),
         precipitationMmH: _toDouble(m['precipitation']),
+        pop: _toDouble(m['pop']),
       );
     }).toList();
   }
@@ -64,6 +70,7 @@ class WeatherMapper {
         rainMm: _rainAmount(h['rain']),
         description: weather.$2,
         icon: weather.$3,
+        conditionId: weather.$1,
       );
     }).toList();
   }
@@ -84,6 +91,14 @@ class WeatherMapper {
   static int _toInt(dynamic v) =>
       v is num ? v.toInt() : int.tryParse('$v') ?? 0;
 
+  /// Như [_toDouble] nhưng trả `null` khi trường VẮNG hoặc không parse được —
+  /// để entity phân biệt "0 thật" với "không có dữ liệu" (UI hiện "—").
+  static double? _toDoubleOrNull(dynamic v) =>
+      v == null ? null : (v is num ? v.toDouble() : double.tryParse('$v'));
+
+  static int? _toIntOrNull(dynamic v) =>
+      v == null ? null : (v is num ? v.toInt() : int.tryParse('$v'));
+
   /// rain có thể là {"1h": 0.5} (current) hoặc số (hourly đôi khi). Trả 0 nếu vắng.
   static double _rainAmount(dynamic rain) {
     if (rain is num) return rain.toDouble();
@@ -92,17 +107,17 @@ class WeatherMapper {
   }
 
   /// (conditionId, description, icon) từ weather[0].
-  static (int, String, String) _firstWeather(dynamic weather) {
+  static (int?, String, String) _firstWeather(dynamic weather) {
     if (weather is List && weather.isNotEmpty) {
       final w = _asMap(weather.first);
       return (
-        _toInt(w['id']),
+        _toIntOrNull(w['id']),
         '${w['description'] ?? ''}',
         '${w['icon'] ?? ''}',
       );
     }
-    // Thiếu weather[] → mặc định 800 (trời quang) thay vì 0 (mã không hợp lệ)
-    // để tránh phân loại nhầm thành "Thời tiết / other".
-    return (800, '', '');
+    // Thiếu weather[] → conditionId null → `WeatherCondition.classify` trả
+    // "Không rõ tình hình" (KHÔNG mặc định 800/nắng gây hiểu nhầm).
+    return (null, '', '');
   }
 }

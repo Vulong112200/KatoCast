@@ -70,7 +70,18 @@ class WeatherCondition {
   static const double kRainMmHHeavy = 2.5; // to
 
   /// Phân loại từ mã điều kiện. [rainMmH] (nếu có) giúp tinh chỉnh cường độ mưa.
-  factory WeatherCondition.classify(int conditionId, {double rainMmH = 0}) {
+  /// [conditionId] null (API thiếu `weather[]`) → "Không rõ tình hình" thay vì
+  /// mặc định nắng — tránh cung cấp thông tin sai.
+  factory WeatherCondition.classify(int? conditionId, {double rainMmH = 0}) {
+    if (conditionId == null) {
+      return const WeatherCondition(
+        category: WeatherCategory.other,
+        severity: WeatherSeverity.info,
+        label: 'Không rõ tình hình',
+        advice: '',
+        emoji: '🌡️',
+      );
+    }
     // --- 2xx: Dông/giông ---
     if (conditionId >= 200 && conditionId < 300) {
       // Dông mạnh hoặc kèm mưa lớn → bão lớn.

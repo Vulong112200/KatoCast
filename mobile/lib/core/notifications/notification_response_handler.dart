@@ -13,7 +13,12 @@ import 'notification_service.dart';
 /// Chạy ở MAIN isolate khi user chạm vào THÂN notification (app đang chạy /
 /// background). Payload của ghi chú → mở màn Ghi chú.
 void onNotificationTap(NotificationResponse resp) {
-  final noteId = parseNotePayload(resp.payload);
+  final payload = resp.payload;
+  if (payload != null && payload.startsWith('announcement:')) {
+    appRouter.push('/announcements');
+    return;
+  }
+  final noteId = parseNotePayload(payload);
   if (noteId != null) {
     appRouter.push('/notes');
   }

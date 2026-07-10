@@ -179,6 +179,26 @@ class AppConfig {
   /// tức thời vì đây là thông tin định hướng ("chiều nay có thể mưa").
   static const double rainOutlookPopThreshold = 0.4;
 
+  // --- Backend KatoAssistant (theo dõi thông báo: JLPT / MBA / chủ đề khác) ---
+
+  /// Base URL backend FastAPI. Nạp qua `--dart-define=KATO_BACKEND_URL=...`
+  /// (mặc định localhost cho dev emulator: 10.0.2.2 trỏ về host của máy Android
+  /// emulator). Prod truyền URL thật khi build.
+  static const String backendBaseUrl = String.fromEnvironment(
+    'KATO_BACKEND_URL',
+    defaultValue: 'http://10.0.2.2:8000',
+  );
+
+  /// Có cấu hình backend theo dõi thông báo không (URL không rỗng).
+  static bool get hasBackend => backendBaseUrl.isNotEmpty;
+
+  /// Mốc giờ MẶC ĐỊNH kiểm tra thông báo mới mỗi ngày (phút-trong-ngày).
+  /// 480 = 8:00 — sau bản tin sáng, giờ hành chính bắt đầu công bố tin.
+  static const int announcementCheckDefaultMinutes = 8 * 60;
+
+  /// Các chủ đề theo dõi được (khớp `topic` ở backend).
+  static const List<String> announcementTopics = ['jlpt', 'mba'];
+
   // --- Định danh & endpoint dịch vụ ngoài ---
 
   /// User-Agent định danh app (chính sách OSM/Overpass yêu cầu UA rõ ràng;

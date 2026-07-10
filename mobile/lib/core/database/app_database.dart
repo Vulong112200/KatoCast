@@ -79,7 +79,24 @@ class NoteItems extends Table {
   IntColumn get seq => integer()();
 }
 
-@DriftDatabase(tables: [WeatherCache, FixedRoutePoints, Notes, NoteItems])
+/// Các thông báo (JLPT/MBA/…) ĐÃ hiển thị cho người dùng — để lần poll sau
+/// KHÔNG báo lại. Khoá tự nhiên là `contentHash` (backend cấp, ổn định theo nội
+/// dung); lưu thêm `remoteId`/`seenAt` để tiện dọn dẹp về sau.
+@DataClassName('SeenAnnouncementRow')
+class SeenAnnouncements extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get contentHash => text()();
+  IntColumn get remoteId => integer()();
+  DateTimeColumn get seenAt => dateTime()();
+
+  @override
+  List<Set<Column>> get uniqueKeys => [
+        {contentHash},
+      ];
+}
+
+@DriftDatabase(
+    tables: [WeatherCache, FixedRoutePoints, Notes, NoteItems, SeenAnnouncements])
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
@@ -87,7 +104,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forExecutor(super.executor);
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -97,6 +114,10 @@ class AppDatabase extends _$AppDatabase {
           if (from < 2) {
             await m.createTable(notes);
             await m.createTable(noteItems);
+          }
+          // v2 → v3: theo dõi thông báo (JLPT/MBA…) — bảng đã-thấy.
+          if (from < 3) {
+            await m.createTable(seenAnnouncements);
           }
         },
       );

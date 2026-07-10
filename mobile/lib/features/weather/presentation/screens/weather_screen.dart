@@ -36,7 +36,7 @@ class WeatherScreen extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('KatoCast 🐾'),
+            const Text('KatoAssistant 🐾'),
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -99,7 +99,7 @@ class WeatherScreen extends ConsumerWidget {
                   child: Text('Dự báo theo giờ',
                       style: Theme.of(context).textTheme.titleMedium),
                 ),
-                HourlyList(hourly: data.hourly),
+                HourlyList(hourly: data.hourly, minutely: data.minutely),
                 const DigestSettingsCard(),
                 const SizedBox(height: 24),
               ],

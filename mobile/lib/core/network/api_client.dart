@@ -6,17 +6,17 @@ import '../error/exceptions.dart';
 /// Factory + interceptor cho Dio.
 ///
 /// Tầng network thuần: chỉ lo HTTP + map lỗi Dio → [exceptions]. KHÔNG chứa
-/// business logic. Datasource dùng instance này; sau này nếu thêm backend
-/// FastAPI proxy chỉ cần đổi `baseUrl`.
+/// business logic. Datasource dùng instance này; mặc định trỏ OpenWeatherMap,
+/// truyền [baseUrl] để tạo client trỏ backend KatoAssistant (theo dõi thông báo).
 class ApiClient {
   final Dio dio;
 
   ApiClient._(this.dio);
 
-  factory ApiClient.create() {
+  factory ApiClient.create({String? baseUrl}) {
     final dio = Dio(
       BaseOptions(
-        baseUrl: AppConfig.owmBaseUrl,
+        baseUrl: baseUrl ?? AppConfig.owmBaseUrl,
         connectTimeout: const Duration(seconds: 10),
         receiveTimeout: const Duration(seconds: 10),
         responseType: ResponseType.json,

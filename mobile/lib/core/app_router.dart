@@ -1,5 +1,6 @@
 import 'package:go_router/go_router.dart';
 
+import '../features/announcements/presentation/screens/announcements_screen.dart';
 import '../features/fixed_route/presentation/screens/route_screen.dart';
 import '../features/map_news/presentation/screens/map_screen.dart';
 import '../features/notes/presentation/screens/note_edit_screen.dart';
@@ -37,6 +38,11 @@ final appRouter = GoRouter(
       name: 'noteEdit',
       builder: (context, state) =>
           NoteEditScreen(noteId: state.extra as int?),
+    ),
+    GoRoute(
+      path: '/announcements',
+      name: 'announcements',
+      builder: (context, state) => const AnnouncementsScreen(),
     ),
     GoRoute(
       path: '/settings',

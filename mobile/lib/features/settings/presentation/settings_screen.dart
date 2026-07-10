@@ -116,11 +116,11 @@ class SettingsScreen extends ConsumerWidget {
           const Padding(
             padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
             child: Text(
-              'KatoCast kiểm tra thời tiết định kỳ kể cả khi bạn đã tắt app. '
+              'KatoAssistant kiểm tra thời tiết định kỳ kể cả khi bạn đã tắt app. '
               'Nhiều hãng (Nubia/MyOS, Xiaomi/HyperOS, Oppo, vivo…) khi bạn VUỐT '
               'TẮT app khỏi màn hình gần đây sẽ dừng app và HỦY mọi thông báo hẹn '
               'giờ. Để thông báo hoạt động ổn định, hãy BẬT "Tự khởi động" và đặt '
-              'pin ở chế độ "Không giới hạn" cho KatoCast.',
+              'pin ở chế độ "Không giới hạn" cho KatoAssistant.',
             ),
           ),
           SwitchListTile(
@@ -140,7 +140,7 @@ class SettingsScreen extends ConsumerWidget {
           const _ActiveHoursSetting(),
           ListTile(
             leading: const Icon(Icons.battery_saver_outlined),
-            title: const Text('Bỏ giới hạn pin cho KatoCast'),
+            title: const Text('Bỏ giới hạn pin cho KatoAssistant'),
             subtitle: const Text('Mở hộp thoại whitelist tối ưu hóa pin'),
             trailing: const Icon(Icons.chevron_right),
             onTap: () async {
@@ -151,7 +151,7 @@ class SettingsScreen extends ConsumerWidget {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
                     content: Text(ok
-                        ? 'Đã bỏ giới hạn pin cho KatoCast.'
+                        ? 'Đã bỏ giới hạn pin cho KatoAssistant.'
                         : 'Chưa bật. Bạn có thể chỉnh trong Cài đặt > Pin.'),
                   ),
                 );
@@ -162,7 +162,7 @@ class SettingsScreen extends ConsumerWidget {
             leading: const Icon(Icons.rocket_launch_outlined),
             title: const Text('Bật "Tự khởi động" (Autostart)'),
             subtitle: const Text(
-                'Cho phép KatoCast tự chạy lại — BẮT BUỘC để thông báo nổ đúng '
+                'Cho phép KatoAssistant tự chạy lại — BẮT BUỘC để thông báo nổ đúng '
                 'giờ sau khi vuốt tắt app (Nubia/Xiaomi/Oppo…).'),
             trailing: const Icon(Icons.chevron_right),
             onTap: () =>
@@ -183,13 +183,14 @@ class SettingsScreen extends ConsumerWidget {
           _sectionTitle(context, 'Giới thiệu'),
           const ListTile(
             leading: Icon(Icons.info_outline),
-            title: Text('KatoCast'),
-            subtitle: Text('Dự báo thời tiết cá nhân hóa · phiên bản 1.0.0'),
+            title: Text('KatoAssistant'),
+            subtitle:
+                Text('Trợ lý cá nhân: thời tiết & thông báo · phiên bản 1.0.0'),
           ),
           ListTile(
             leading: const Text('🐱', style: TextStyle(fontSize: 24)),
             title: const Text('Về chú mèo Kato'),
-            subtitle: const Text('Vì sao app tên là KatoCast?'),
+            subtitle: const Text('Vì sao app tên là KatoAssistant?'),
             onTap: () => _showAboutKato(context),
           ),
           const SizedBox(height: 24),
@@ -204,10 +205,10 @@ class SettingsScreen extends ConsumerWidget {
       builder: (context) => AlertDialog(
         title: const Text('🐱 Chú mèo Kato'),
         content: const Text(
-          'KatoCast được đặt theo tên Kato — chú mèo Bengal lai mèo rừng ta, '
-          'lông nâu sọc trắng. Kato thính tai, nhạy mũi và rất giỏi "đánh hơi" '
-          'thời tiết, nên app này đồng hành cùng bạn mỗi ngày dưới cái tên của '
-          'cậu ấy. 🐾',
+          'KatoAssistant được đặt theo tên Kato — chú mèo Bengal lai mèo rừng ta, '
+          'lông nâu sọc trắng. Kato thính tai, nhạy mũi và rất giỏi "đánh hơi" — '
+          'không chỉ thời tiết mà cả những tin bạn đang ngóng (lịch thi, khoá '
+          'học…). Cậu ấy tha tin về cho bạn mỗi ngày. 🐾',
         ),
         actions: [
           TextButton(

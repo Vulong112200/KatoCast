@@ -24,9 +24,12 @@ class DetectEnvChange {
   EnvChange call(WeatherData data) {
     if (data.hourly.isEmpty) return EnvChange.none;
 
-    final window = data.hourly.take(3);
+    // Thiếu quan trắc nhiệt độ/độ ẩm hiện tại → không so sánh được (bỏ qua).
     final curT = data.current.tempC;
-    final curH = data.current.humidity.toDouble();
+    final curHInt = data.current.humidity;
+    if (curT == null || curHInt == null) return EnvChange.none;
+    final window = data.hourly.take(3);
+    final curH = curHInt.toDouble();
 
     var maxTempDelta = 0.0;
     var maxHumDelta = 0.0;

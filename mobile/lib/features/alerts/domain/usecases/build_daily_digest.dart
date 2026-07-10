@@ -29,14 +29,17 @@ class BuildDailyDigest {
       rainMmH: c.rain1h,
     );
 
-    // Tiêu đề: emoji + nhãn tình hình + nhiệt độ hiện tại.
-    final title = '${condition.emoji} ${condition.label} · ${c.tempC.round()}°C';
+    // Tiêu đề: emoji + nhãn tình hình + nhiệt độ hiện tại ("—" nếu thiếu).
+    final tempStr = c.tempC != null ? '${c.tempC!.round()}°C' : '—';
+    final title = '${condition.emoji} ${condition.label} · $tempStr';
 
     // Câu chào mở đầu mang giọng Kato (phân biệt sáng/tối theo mốc giờ).
     final ref = now ?? DateTime.now();
+    final feelsStr = c.feelsLikeC != null ? '${c.feelsLikeC!.round()}°C' : '—';
+    final humStr = c.humidity != null ? '${c.humidity}%' : '—';
     final parts = <String>[
       '${KatoVoice.digest(morning: ref.hour < 12, seed: ref.minute)}'
-          'Cảm giác như ${c.feelsLikeC.round()}°C, độ ẩm ${c.humidity}%.',
+          'Cảm giác như $feelsStr, độ ẩm $humStr.',
     ];
 
     // Hi/lo trong 24h tới (nếu có dữ liệu hourly).
@@ -66,9 +69,12 @@ class BuildDailyDigest {
     if (rainHint != null) parts.add(rainHint);
 
     // Chỉ số UV kèm lời khuyên theo mức (luôn hiển thị để người dùng hiểu ý
-    // nghĩa từng mức UV, không chỉ khi cao).
-    final uv = UvAdvice.classify(c.uvi);
-    parts.add('UV ${uv.level} — ${uv.label}: ${uv.advice}');
+    // nghĩa từng mức UV, không chỉ khi cao). Bỏ qua nếu API thiếu UV.
+    final uvi = c.uvi;
+    if (uvi != null) {
+      final uv = UvAdvice.classify(uvi);
+      parts.add('UV ${uv.level} — ${uv.label}: ${uv.advice}');
+    }
 
     // Mốc thời gian dữ liệu được lấy — cho người dùng biết độ tươi của bản tin.
     parts.add('Cập nhật lúc ${_clock(data.fetchedAt)}.');

@@ -1,5 +1,5 @@
 name: katocast
-description: "KatoCast — ứng dụng dự báo thời tiết cá nhân hóa, độ chính xác cao."
+description: "KatoAssistant — trợ lý cá nhân: dự báo thời tiết + theo dõi thông báo (kỳ thi, khoá học…)."
 publish_to: 'none'
 version: 1.0.0+1
 

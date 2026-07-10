@@ -2,18 +2,38 @@ import 'hourly.dart';
 import 'minutely.dart';
 
 /// Thời tiết hiện tại — entity domain thuần (đơn vị đã chuẩn hoá metric).
+///
+/// Các trường số dùng kiểu nullable: `null` = API KHÔNG trả trường đó (dữ liệu
+/// thiếu) để UI hiển thị "—" thay vì "0" gây hiểu nhầm. Chỉ [rain1h] mặc định 0
+/// vì "vắng lượng mưa" nghĩa là không mưa.
 class CurrentWeather {
   final DateTime time;
-  final double tempC;
-  final double feelsLikeC;
-  final int humidity; // %
-  final double uvi; // chỉ số UV
-  final int clouds; // %
-  final double windSpeed; // m/s
+  final double? tempC;
+  final double? feelsLikeC;
+  final int? humidity; // %
+  final double? uvi; // chỉ số UV
+  final int? clouds; // %
+  final double? windSpeed; // m/s
+
+  /// Hướng gió (độ, 0–360), null nếu thiếu.
+  final int? windDeg;
+
+  /// Gió giật (m/s), null nếu thiếu.
+  final double? windGust;
+
+  /// Áp suất khí quyển (hPa), null nếu thiếu.
+  final int? pressure;
+
+  /// Điểm sương (°C), null nếu thiếu.
+  final double? dewPointC;
+
+  /// Tầm nhìn (mét), null nếu thiếu.
+  final int? visibilityM;
 
   /// Mã điều kiện thời tiết OpenWeatherMap (weather[0].id) — dùng để phân loại
   /// nắng / mây / mưa nhỏ-to / dông-bão. Xem `WeatherCondition.classify`.
-  final int conditionId;
+  /// null nếu API thiếu `weather[]` (→ phân loại "không rõ", KHÔNG mặc định nắng).
+  final int? conditionId;
   final String description;
   final String icon;
 
@@ -28,6 +48,11 @@ class CurrentWeather {
     required this.uvi,
     required this.clouds,
     required this.windSpeed,
+    this.windDeg,
+    this.windGust,
+    this.pressure,
+    this.dewPointC,
+    this.visibilityM,
     required this.conditionId,
     required this.description,
     required this.icon,

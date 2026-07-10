@@ -53,10 +53,11 @@ class WeatherRemoteDataSource {
         // current: data[0] của 4.0 đã có temp/feels_like/humidity/uvi/clouds/
         // wind_speed/weather[]/rain{1h}/dt — khớp WeatherMapper._current.
         'current': currentList.first,
-        // minutely: mỗi mốc 15' → {dt, precipitation(mm/h)} lấy từ rain.1h.
+        // minutely: mỗi mốc 15' → {dt, precipitation(mm/h) từ rain.1h, pop}.
+        // pop của nowcast 15' nhạy hơn hourly.pop → cột giờ gần dùng số này.
         'minutely': [
           for (final r in min15)
-            {'dt': r['dt'], 'precipitation': _rain1h(r['rain'])},
+            {'dt': r['dt'], 'precipitation': _rain1h(r['rain']), 'pop': r['pop']},
         ],
         // hourly: giữ nguyên các trường WeatherMapper._hourlyList cần.
         'hourly': hourly,

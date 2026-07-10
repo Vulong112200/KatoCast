@@ -4,6 +4,8 @@ import '../../features/alerts/data/alert_state_store.dart';
 import '../../features/alerts/data/digest_scheduler.dart';
 import '../../features/alerts/data/notification_prefs_store.dart';
 import '../../features/alerts/domain/usecases/build_weather_alerts.dart';
+import '../../features/announcements/data/announcement_prefs_store.dart';
+import '../../features/announcements/data/announcement_scheduler.dart';
 import '../../features/weather/data/datasources/weather_local_datasource.dart';
 import '../../features/weather/data/datasources/weather_remote_datasource.dart';
 import '../../features/weather/data/repositories/weather_repository_impl.dart';
@@ -115,6 +117,10 @@ Future<WeatherData?> runWeatherCheck() async {
       // Bản tin hằng ngày: đảm bảo alarm đã lập đúng mốc theo cài đặt hiện tại.
       final dp = await NotificationPrefsStore().read();
       await scheduleDigests(dp);
+
+      // Theo dõi thông báo (JLPT/MBA…): đảm bảo alarm poll đã lập (idempotent).
+      final ap = await AnnouncementPrefsStore().read();
+      await scheduleAnnouncementCheck(ap);
     } catch (_) {
       // Nuốt lỗi side-effect; `data` vẫn được trả về bên dưới.
     }
@@ -132,9 +138,11 @@ Future<WeatherData?> runWeatherCheck() async {
 String foregroundStatusText(WeatherData data) {
   final c = data.current;
   final condition = WeatherCondition.classify(c.conditionId, rainMmH: c.rain1h);
-  final uv = UvAdvice.classify(c.uvi);
-  return '${condition.emoji} ${c.tempC.round()}°C · ${condition.label} '
-      '· UV ${uv.level} · cập nhật ${_hhmm(data.fetchedAt)}';
+  final tempStr = c.tempC != null ? '${c.tempC!.round()}°C' : '—';
+  final uvi = c.uvi;
+  final uvStr = uvi != null ? ' · UV ${UvAdvice.classify(uvi).level}' : '';
+  return '${condition.emoji} $tempStr · ${condition.label}'
+      '$uvStr · cập nhật ${_hhmm(data.fetchedAt)}';
 }
 
 /// Định dạng giờ "HH:mm" theo giờ máy (thủ công, không cần `intl`).

@@ -21,8 +21,12 @@ class CurrentWeatherCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).textTheme;
-    final uv = UvAdvice.classify(current.uvi);
+    final uvi = current.uvi;
+    final uv = uvi != null ? UvAdvice.classify(uvi) : null;
     final hiLo = _hiLo();
+    final tempStr = current.tempC != null ? '${current.tempC!.round()}°C' : '—';
+    final feelsStr =
+        current.feelsLikeC != null ? '${current.feelsLikeC!.round()}°C' : '—';
     return Card(
       margin: const EdgeInsets.all(16),
       child: Padding(
@@ -30,10 +34,10 @@ class CurrentWeatherCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('${current.tempC.round()}°C',
+            Text(tempStr,
                 style: t.displaySmall?.copyWith(fontWeight: FontWeight.bold)),
             Text(
-              '${current.description} · cảm giác ${current.feelsLikeC.round()}°C',
+              '${current.description} · cảm giác $feelsStr',
               style: t.bodyMedium,
             ),
             if (hiLo != null) ...[
@@ -45,21 +49,54 @@ class CurrentWeatherCard extends StatelessWidget {
               spacing: 20,
               runSpacing: 12,
               children: [
-                _metric(context, Icons.water_drop, 'Độ ẩm',
-                    '${current.humidity}%'),
+                _metric(context, Icons.water_drop, 'Độ ẩm', _pct(current.humidity)),
                 _metric(context, Icons.wb_sunny, 'UV',
-                    '${uv.level} · ${uv.label}', color: _uvColor(uv.band)),
-                _metric(context, Icons.cloud, 'Mây', '${current.clouds}%'),
+                    uv != null ? '${uv.level} · ${uv.label}' : '—',
+                    color: uv != null ? _uvColor(uv.band) : null),
+                _metric(context, Icons.cloud, 'Mây', _pct(current.clouds)),
                 _metric(context, Icons.umbrella, 'Mưa 1h',
                     '${current.rain1h.toStringAsFixed(1)} mm'),
-                _metric(context, Icons.air, 'Gió',
-                    '${current.windSpeed.toStringAsFixed(1)} m/s'),
+                _metric(context, Icons.air, 'Gió', _wind()),
+                if (current.windGust != null)
+                  _metric(context, Icons.storm, 'Gió giật',
+                      '${current.windGust!.toStringAsFixed(1)} m/s'),
+                if (current.dewPointC != null)
+                  _metric(context, Icons.opacity, 'Điểm sương',
+                      '${current.dewPointC!.round()}°C'),
+                if (current.pressure != null)
+                  _metric(context, Icons.speed, 'Áp suất',
+                      '${current.pressure} hPa'),
+                if (current.visibilityM != null)
+                  _metric(context, Icons.visibility, 'Tầm nhìn',
+                      _visibility(current.visibilityM!)),
               ],
             ),
           ],
         ),
       ),
     );
+  }
+
+  /// "72%" hoặc "—" nếu thiếu.
+  String _pct(int? v) => v != null ? '$v%' : '—';
+
+  /// Gió: tốc độ (m/s) kèm hướng la bàn nếu có, "—" nếu thiếu tốc độ.
+  String _wind() {
+    final s = current.windSpeed;
+    if (s == null) return '—';
+    final dir = current.windDeg != null ? ' ${_compass(current.windDeg!)}' : '';
+    return '${s.toStringAsFixed(1)} m/s$dir';
+  }
+
+  /// Tầm nhìn: km nếu ≥1000m, ngược lại theo mét.
+  String _visibility(int m) =>
+      m >= 1000 ? '${(m / 1000).toStringAsFixed(1)} km' : '$m m';
+
+  /// Độ (0–360) → hướng la bàn tiếng Việt (8 hướng).
+  String _compass(int deg) {
+    const dirs = ['B', 'ĐB', 'Đ', 'ĐN', 'N', 'TN', 'T', 'TB'];
+    final i = (((deg % 360) + 22.5) ~/ 45) % 8;
+    return dirs[i];
   }
 
   /// (thấp, cao) làm tròn trong ~24h tới, null nếu không có dữ liệu giờ.

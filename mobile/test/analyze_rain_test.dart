@@ -206,20 +206,22 @@ void main() {
       expect(status.probabilityPct, 90);
     });
 
-    test('minutely xác nhận sắp mưa ⇒ floor 80% dù hourly.pop thấp hơn', () {
+    test('SẮP mưa (nowcast) KHÔNG floor ⇒ hiện pop THẬT dù thấp', () {
+      // Onset 20\' → nằm trong giờ 12 (pop 0.3). Trước đây bị ép sàn 80%; nay
+      // "sắp mưa" hiện đúng 30% (chỉ ép sàn khi ĐANG mưa).
       final minutely = List<double>.filled(60, 0.0);
       for (var i = 20; i < 60; i++) {
         minutely[i] = 1.5;
       }
       final status = sut.call(
-        _data(minutely: minutely, hourly: [_h(12, 0.7, 0), _h(13, 0.9, 2.0)]),
+        _data(minutely: minutely, hourly: [_h(12, 0.3, 0), _h(13, 0.9, 2.0)]),
         now: base,
       );
       expect(status.phase, RainPhase.rainStartingSoon);
-      expect(status.probabilityPct, 80); // max(70, floor 80)
+      expect(status.probabilityPct, 30); // pop thật, không còn ép sàn
     });
 
-    test('minutely xác nhận + hourly.pop cao hơn floor ⇒ giữ pop', () {
+    test('SẮP mưa + hourly.pop cao ⇒ giữ pop thật', () {
       final minutely = List<double>.filled(60, 0.0);
       for (var i = 20; i < 60; i++) {
         minutely[i] = 1.5;
@@ -440,6 +442,26 @@ void main() {
       expect(status.segments[1].intensity, RainIntensity.possible);
       expect(status.segments[1].end, isNull); // hết dữ liệu khi còn ướt
       expect(status.rainEndsAt, isNull);
+    });
+
+    test('2 cơn mưa trong nowcast: cường độ đoạn ĐẦU không bị cơn sau thổi phồng',
+        () {
+      // Cơn A: phút 5–14 mưa nhỏ (1.5). Khô bền vững từ phút 15. Cơn B: phút
+      // 30–40 mưa TO (10.0). Đoạn mưa sắp tới (cơn A, gói trong cửa sổ) phải là
+      // "mưa nhỏ" — trước fix, _maxMinutelyRate quét tới hết nên nhận nhầm cơn B.
+      final minutely = List<double>.filled(60, 0.0);
+      for (var i = 5; i < 15; i++) {
+        minutely[i] = 1.5;
+      }
+      for (var i = 30; i < 41; i++) {
+        minutely[i] = 10.0;
+      }
+      final status = sut.call(_data(minutely: minutely), now: base);
+      expect(status.phase, RainPhase.rainStartingSoon);
+      expect(status.changeAt, base.add(const Duration(minutes: 5)));
+      expect(status.rainEndsAt, base.add(const Duration(minutes: 15)));
+      expect(status.segments.length, 1);
+      expect(status.segments.first.intensity, RainIntensity.light);
     });
   });
 }

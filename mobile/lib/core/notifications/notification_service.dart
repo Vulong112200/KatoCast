@@ -21,6 +21,9 @@ class NotificationService {
   /// Channel NHẮC ghi chú theo lịch: high để heads-up đúng giờ hẹn.
   static const String noteReminderChannelId = 'note_reminders';
 
+  /// Channel THÔNG BÁO thông tin mới (JLPT/MBA…): high để heads-up khi có tin.
+  static const String announcementsChannelId = 'announcements';
+
   final FlutterLocalNotificationsPlugin _plugin =
       FlutterLocalNotificationsPlugin();
 
@@ -65,6 +68,12 @@ class NotificationService {
       description: 'Thông báo nhắc ghi chú theo lịch bạn đặt.',
       importance: Importance.high,
     ));
+    await android?.createNotificationChannel(const AndroidNotificationChannel(
+      announcementsChannelId,
+      'Thông báo mới',
+      description: 'Tin mới về kỳ thi (JLPT), khoá học (MBA) và chủ đề bạn theo dõi.',
+      importance: Importance.high,
+    ));
 
     _initialized = true;
   }
@@ -103,6 +112,30 @@ class NotificationService {
           UILocalNotificationDateInterpretation.absoluteTime,
       matchDateTimeComponents: DateTimeComponents.time,
     );
+  }
+
+  /// Hiện thông báo tin mới (JLPT/MBA…) trên channel [announcementsChannelId],
+  /// BigText để tiêu đề + nguồn dài không bị cắt. [payload] để tap điều hướng.
+  Future<void> showAnnouncement({
+    required int id,
+    required String title,
+    required String body,
+    String? payload,
+  }) async {
+    await init();
+    final details = NotificationDetails(
+      android: AndroidNotificationDetails(
+        announcementsChannelId,
+        'Thông báo mới',
+        channelDescription:
+            'Tin mới về kỳ thi (JLPT), khoá học (MBA) và chủ đề bạn theo dõi.',
+        importance: Importance.high,
+        priority: Priority.high,
+        styleInformation: BigTextStyleInformation(body, contentTitle: title),
+      ),
+      iOS: const DarwinNotificationDetails(),
+    );
+    await _plugin.show(id, title, body, details, payload: payload);
   }
 
   /// Huỷ một thông báo / lịch theo [id].
@@ -210,4 +243,12 @@ class NotificationIds {
   /// Bản tin THỬ (tự chẩn đoán chạy nền). Nằm DƯỚI `digestBase` nên khi callback
   /// tính `index = id - digestBase < 0` → không re-arm (bắn đúng một lần).
   static const int digestTest = 1099;
+
+  /// Thông báo tin mới (JLPT/MBA…). Alarm poll dùng [announcementAlarm]; mỗi tin
+  /// hiển thị với ID `announcementBase + (remoteId % announcementIdSpan)` để
+  /// nhiều tin không đè nhau. Dải [2000, 2000+span) nằm giữa weather/digest và
+  /// notes (10000+) nên không đụng.
+  static const int announcementAlarm = 1200;
+  static const int announcementBase = 2000;
+  static const int announcementIdSpan = 500;
 }

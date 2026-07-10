@@ -22,12 +22,12 @@ class AppDrawer extends StatelessWidget {
               children: [
                 const Text('🐱', style: TextStyle(fontSize: 40)),
                 const SizedBox(height: 8),
-                Text('KatoCast',
+                Text('KatoAssistant',
                     style: Theme.of(context).textTheme.titleLarge?.copyWith(
                           color: scheme.onPrimaryContainer,
                           fontWeight: FontWeight.bold,
                         )),
-                Text('Dự báo thời tiết cá nhân hóa',
+                Text('Trợ lý cá nhân: thời tiết & thông báo',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: scheme.onPrimaryContainer,
                         )),
@@ -41,6 +41,8 @@ class AppDrawer extends StatelessWidget {
               'Lộ trình & tiện ích'),
           _item(context, current, '/notes', Icons.sticky_note_2_outlined,
               'Ghi chú'),
+          _item(context, current, '/announcements',
+              Icons.campaign_outlined, 'Theo dõi thông báo'),
           const Divider(),
           _item(context, current, '/settings', Icons.settings_outlined,
               'Cài đặt'),

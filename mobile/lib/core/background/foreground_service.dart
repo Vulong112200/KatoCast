@@ -51,7 +51,7 @@ class _WeatherTaskHandler extends TaskHandler {
       final data = await runWeatherCheck();
       if (data != null) {
         FlutterForegroundTask.updateService(
-          notificationTitle: 'KatoCast đang theo dõi thời tiết',
+          notificationTitle: 'KatoAssistant đang theo dõi thời tiết',
           notificationText: foregroundStatusText(data),
         );
       }
@@ -114,7 +114,7 @@ Future<void> startWeatherForegroundService() async {
   } else {
     await FlutterForegroundTask.startService(
       serviceId: kForegroundServiceId,
-      notificationTitle: 'KatoCast đang theo dõi thời tiết',
+      notificationTitle: 'KatoAssistant đang theo dõi thời tiết',
       notificationText: 'Đang cập nhật tình hình thời tiết…',
       callback: foregroundStartCallback,
     );

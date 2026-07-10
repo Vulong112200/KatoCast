@@ -184,8 +184,8 @@ class _KatoCastAppState extends ConsumerState<KatoCastApp> {
               'Trên một số máy (Nubia/MyOS, Xiaomi/HyperOS, Oppo…), khi bạn '
               'VUỐT TẮT app khỏi danh sách gần đây, hệ điều hành sẽ dừng app và '
               'HỦY mọi thông báo hẹn giờ (bản tin, nhắc ghi chú, cảnh báo mưa).\n\n'
-              'Để KatoCast báo đúng giờ kể cả sau khi vuốt tắt, hãy:\n'
-              '1) Bật "Tự khởi động" (Autostart) cho KatoCast.\n'
+              'Để KatoAssistant báo đúng giờ kể cả sau khi vuốt tắt, hãy:\n'
+              '1) Bật "Tự khởi động" (Autostart) cho KatoAssistant.\n'
               '2) Đặt pin ở chế độ "Không giới hạn".',
             ),
           ),
@@ -243,7 +243,7 @@ class _KatoCastAppState extends ConsumerState<KatoCastApp> {
         }
 
         return MaterialApp.router(
-          title: 'KatoCast',
+          title: 'KatoAssistant',
           debugShowCheckedModeBanner: false,
           theme: buildAppTheme(
             seed: seed,

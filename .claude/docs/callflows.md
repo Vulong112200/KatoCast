@@ -157,6 +157,28 @@ TỰ CHẨN ĐOÁN: DigestSettingsCard "Đặt bản tin thử sau 1 phút" → 
    digestTest). Nổ khi khóa màn hình = lập lịch OK; vuốt tắt app rồi KHÔNG nổ = force-stop OEM → bật Autostart.
 ```
 
+### 2c. Theo dõi thông báo (JLPT/MBA) — backend crawl + mobile poll 1 lần/ngày
+```
+[BACKEND] cron/HTTP: python -m app.jobs.daily_crawl  |  POST /api/v1/crawl
+   ▼ crawl_service.run_all: với mỗi watch_source (whitelist nguồn GỐC chính thức)
+      httpx.get(bytes) → BeautifulSoup parse (item_selector) → mỗi mục:
+        content_hash = sha256(topic|title|url) → ĐÃ có trong DB? → bỏ (không phải tin MỚI)
+        verify_service.verify(topic,title,text): có ANTHROPIC_API_KEY → Claude Haiku {matched,score,summary}
+                                                 không key → rule-based (keyword topic + regex ngày; MBA cờ "không GMAT")
+        matched? → lưu Announcement(source_domain để kiểm chứng, verified=score≥0.5)
+   ▼ GET /api/v1/announcements?topic=&since=  ← mobile tiêu thụ
+
+[MOBILE] lập lịch (idempotent): runWeatherCheck (cạnh scheduleDigests) / đổi cài đặt
+   ▼ scheduleAnnouncementCheck(prefs) → oneShotAt(announcementAlarm=1200) exact+allowWhileIdle (KHÔNG periodic)
+Đến mốc giờ → AlarmManager đánh thức isolate → announcementCheckCallback(id) → _fetchAndNotify:
+   AnnouncementRepository.fetchNewUnseen(topics): fetch backend → lọc bỏ contentHash có trong Drift seen_announcements
+   → mỗi tin mới: NotificationService.showAnnouncement (KatoVoice.announcement + domain nguồn, payload announcement:<id>)
+   → markSeen CHỈ các tin hiển thị THÀNH CÔNG (tin lỗi → thử lại lần sau)
+   → RE-ARM: scheduleAnnouncementSlot(id, checkMinutes) cho NGÀY MAI (finally; bỏ nếu !enabled)
+Chạm thông báo → onNotificationTap(payload announcement:) → appRouter.push('/announcements')
+TỰ CHẨN ĐOÁN: AnnouncementsScreen "Kiểm tra tin mới ngay" → checkAnnouncementsNow (KHÔNG re-arm) → snackbar số tin.
+```
+
 ### 6. Ghi chú — ghim sticky & nút "Đã đọc"
 ```
 NotesScreen/NoteEditScreen → notesControllerProvider (save/togglePin/toggleItemDone…)
