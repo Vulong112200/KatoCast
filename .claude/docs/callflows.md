@@ -176,7 +176,23 @@ TỰ CHẨN ĐOÁN: DigestSettingsCard "Đặt bản tin thử sau 1 phút" → 
    → markSeen CHỈ các tin hiển thị THÀNH CÔNG (tin lỗi → thử lại lần sau)
    → RE-ARM: scheduleAnnouncementSlot(id, checkMinutes) cho NGÀY MAI (finally; bỏ nếu !enabled)
 Chạm thông báo → onNotificationTap(payload announcement:) → appRouter.push('/announcements')
+   ▼ crawl_service cũng set extracted_dates = date_extract.extract_dates(text) (regex, gợi ý "chưa kiểm chứng")
 TỰ CHẨN ĐOÁN: AnnouncementsScreen "Kiểm tra tin mới ngay" → checkAnnouncementsNow (KHÔNG re-arm) → snackbar số tin.
+```
+
+### 2d. Lịch & mốc hạn (đăng ký/thi/kết quả) — độ chính xác 3 tầng, KHÔNG LLM
+```
+[BACKEND] seed_events (idempotent upsert_by_label) → exam_events curated=true (JLPT kỳ 7&12/2026,
+          ngày xác thực từ info.jees-jlpt.jp)  ▼ GET /api/v1/events?topic=  ← mobile tiêu thụ
+[MOBILE] AnnouncementsScreen section "📅 Lịch & hạn":
+   examEventsProvider → EventRepository.fetchMerged(topics):
+      backend events (ExamEvent.fromJson)  +  Drift event_overrides (bản sửa/thêm của người dùng)
+      → áp override theo sourceEventId (bản sửa LUÔN ưu tiên, isUserVerified) / ghép event tự thêm
+   → mỗi event: computeStatus(event, now) → EventStatus{summaryLabel, level, lines}
+      chip màu đỏ/cam/xanh/xám: đăng ký chưa mở/đang mở(còn N)/hết hạn · sắp thi(còn N)/đã thi · kết quả
+   Sửa/Thêm: EventEditDialog (4 date-picker, dựng tường minh cho phép xoá về null)
+      → EventRepository.saveOverride (upsert theo sourceEventId / overrideId) → ref.invalidate(examEventsProvider)
+      "Khôi phục lịch gốc"/"Xoá" → deleteOverride(overrideId)
 ```
 
 ### 6. Ghi chú — ghim sticky & nút "Đã đọc"

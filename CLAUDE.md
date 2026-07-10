@@ -66,7 +66,7 @@
 | Module 1 — Map & News | ✅ | — | `features/map_news/*` | bản đồ OSM (flutter_map) + lớp mưa OWM; tin tức RSS thời tiết (`MapScreen`, `/map`) |
 | Module 2 — Fixed Route POI | ✅ | — | `features/fixed_route/*` | lưu lộ trình (Drift) + quét POI dọc đường qua Overpass/OSM (`RouteScreen`, `/routes`) |
 | Ghi chú (notes) | ✅ | — | `features/notes/*` + `core/notifications/notification_response_handler.dart` | Note text/checklist, màu, tìm kiếm, khu "Đã xong"; **ghim sticky** lên thanh thông báo (`ongoing`, sống qua "Xoá tất cả", chỉ gỡ bằng nút **"Đã đọc"** — note giữ nguyên trong app); **hẹn nhắc** một lần/hằng ngày/hằng tuần theo thứ (`zonedSchedule` exact, sống qua reboot); re-assert ghim ở bootstrap + worker 15'; ID scheme `10000 + noteId*16 + slot` (`NotesScreen` `/notes`) |
-| Theo dõi thông báo (announcements) | ✅ | **`backend/`** (FastAPI) | `features/announcements/*` + `core/background/announcement_alarm.dart` | **Kiến trúc HYBRID** (mở rộng app → **KatoAssistant**). **Backend** crawl **whitelist nguồn GỐC chính thức** (JLPT: jlpt.jp/jees; MBA: nguồn trường tự cấu hình) → **diff phát hiện mục MỚI** (dedup `content_hash`) → **xác thực** (Claude Haiku phân loại khớp chủ đề + tóm tắt, có rule-based fallback keyword+ngày) → lưu Postgres/SQLite → expose `GET /api/v1/announcements`. **Mobile** poll backend **1 lần/ngày** qua **alarm exact `oneShotAt` tự re-arm** (copy mẫu digest; `announcementCheckCallback`, `scheduleAnnouncementCheck`), lọc mục chưa thấy bằng Drift `seen_announcements`, hiện thông báo **giọng Kato** (`KatoVoice.announcement`) kèm **domain nguồn để kiểm chứng** (chống fake), tap → `/announcements`. Màn **AnnouncementsScreen** (list + bật/tắt + giờ kiểm tra + chọn chủ đề JLPT/MBA + nút **"Kiểm tra tin mới ngay"** `checkAnnouncementsNow`, mở URL nguồn qua url_launcher). Chủ đề generic → thêm bất kỳ (học bổng/visa…) chỉ cần thêm `watch_source`. Dùng chung plugin `android_alarm_manager_plus` với digest nên KHÔNG cần khai báo manifest thêm |
+| Theo dõi thông báo (announcements) | ✅ | **`backend/`** (FastAPI) | `features/announcements/*` + `core/background/announcement_alarm.dart` | **Kiến trúc HYBRID** (mở rộng app → **KatoAssistant**). **Backend** crawl **whitelist nguồn GỐC chính thức** (JLPT: jlpt.jp/jees; MBA: nguồn trường tự cấu hình) → **diff phát hiện mục MỚI** (dedup `content_hash`) → **xác thực** (Claude Haiku phân loại khớp chủ đề + tóm tắt, có rule-based fallback keyword+ngày) → lưu Postgres/SQLite → expose `GET /api/v1/announcements`. **Mobile** poll backend **1 lần/ngày** qua **alarm exact `oneShotAt` tự re-arm** (copy mẫu digest; `announcementCheckCallback`, `scheduleAnnouncementCheck`), lọc mục chưa thấy bằng Drift `seen_announcements`, hiện thông báo **giọng Kato** (`KatoVoice.announcement`) kèm **domain nguồn để kiểm chứng** (chống fake), tap → `/announcements`. Màn **AnnouncementsScreen** (list + bật/tắt + giờ kiểm tra + chọn chủ đề JLPT/MBA + nút **"Kiểm tra tin mới ngay"** `checkAnnouncementsNow`, mở URL nguồn qua url_launcher). Chủ đề generic → thêm bất kỳ (học bổng/visa…) chỉ cần thêm `watch_source`. Dùng chung plugin `android_alarm_manager_plus` với digest nên KHÔNG cần khai báo manifest thêm. **Lịch & mốc hạn:** backend `exam_events` (mốc đăng ký/thi/kết quả, `curated` = lịch chuẩn seed từ nguồn chính thức, `GET /api/v1/events`) — **độ chính xác 3 tầng**: (1) lịch chuẩn seed (JLPT kỳ 7&12/2026, ngày xác thực từ info.jees-jlpt.jp), (2) regex `date_extract` trích ngày trong tin (JP `年月日`/令和 + VN dd/mm + ISO, gán nhãn theo keyword gần nhất) → hiển thị "chưa kiểm chứng", (3) **người dùng sửa/thêm/ghi đè** (Drift `event_overrides`, LUÔN ưu tiên, badge "đã kiểm chứng"). Trạng thái còn hạn/hết hạn **tính client-side** (`computeStatus` → chip màu đỏ/cam/xanh/xám) để luôn tươi. Section "📅 Lịch & hạn" + `EventEditDialog` (4 date picker) trong AnnouncementsScreen. **KHÔNG dùng LLM** cho trích ngày |
 
 > Status: 📋 planned · 🚧 in progress · ✅ done
 
@@ -76,7 +76,8 @@
 
 | Group | Method | Path | Mô tả |
 |-------|--------|------|-------|
-| KatoAssistant BE | GET | `/api/v1/announcements?topic=&since=` | danh sách thông báo (JLPT/MBA/…) đã diff & xác thực; `since` lọc mục mới |
+| KatoAssistant BE | GET | `/api/v1/announcements?topic=&since=` | danh sách thông báo (JLPT/MBA/…) đã diff & xác thực; `since` lọc mục mới; mỗi mục kèm `extracted_dates` (ngày regex tự phát hiện, CHƯA kiểm chứng) |
+| KatoAssistant BE | GET | `/api/v1/events?topic=` | lịch CÓ CẤU TRÚC (exam_events): mốc đăng ký/thi/kết quả; `curated=true` = lịch chuẩn đã seed/kiểm chứng |
 | KatoAssistant BE | GET/POST | `/api/v1/watch-sources` | liệt kê / thêm nguồn GỐC theo dõi (topic, url, item_selector, keywords) |
 | KatoAssistant BE | POST | `/api/v1/crawl?topic=` | chạy crawl ngay (cron/HTTP gọi); trả số mục mới |
 | KatoAssistant BE | GET | `/health` | health check + cờ có LLM |
@@ -105,10 +106,11 @@
 | `notes` | Ghi chú (title, body, colorIndex, pinned, done, remindAt, repeat, weekdaysMask, createdAt/updatedAt) | 1—n `note_items` |
 | `note_items` | Mục checklist (noteId, content, done, seq) | thuộc `notes` qua noteId |
 | `seen_announcements` | Thông báo (JLPT/MBA…) ĐÃ hiển thị — chống báo lại (contentHash **unique**, remoteId, seenAt) | PK = id; khoá tự nhiên `contentHash` |
+| `event_overrides` | Bản SỬA/THÊM của người dùng cho lịch (ExamEvent) — luôn ưu tiên hơn backend (sourceEventId **unique** nullable, sessionLabel, regStart/regEnd/examDate/resultDate, note, updatedAt) | PK = id; `sourceEventId` link event backend (null = tự thêm) |
 
-> schemaVersion = **3** (v1→v2 thêm notes/note_items; v2→v3 thêm seen_announcements — qua `MigrationStrategy.onUpgrade`).
+> schemaVersion = **4** (v1→v2 notes/note_items; v2→v3 seen_announcements; v3→v4 event_overrides — qua `MigrationStrategy.onUpgrade`).
 >
-> **Backend DB** (Postgres/SQLite, SQLAlchemy — `backend/app/models/`): `announcements` (topic, title, summary, source_url, source_domain, content_hash unique, verified, score, first_seen_at) · `watch_sources` (topic, url, parser_type, item_selector, keywords, enabled). Migration qua Alembic (`backend/alembic/`).
+> **Backend DB** (Postgres/SQLite, SQLAlchemy — `backend/app/models/`): `announcements` (topic, title, summary, source_url, source_domain, content_hash unique, verified, score, first_seen_at, **extracted_dates** JSON regex) · `watch_sources` (topic, url, parser_type, item_selector, keywords, enabled) · **`exam_events`** (topic, session_label, registration_start/end, exam_date, result_date, source_url/domain, curated, note, updated_at — lịch chuẩn seed). Migration qua Alembic (`backend/alembic/` — 0001 initial, 0002 events+extracted_dates).
 
 ## 6. Shared Utilities
 
@@ -127,12 +129,17 @@
 
 ### File quan trọng nhất (cập nhật khi project lớn lên)
 - `backend/app/main.py`, `backend/app/api/router.py`, `backend/app/core/config.py`
-- `backend/app/services/crawl_service.py` (**LÕI** crawl+diff+verify), `backend/app/services/verify_service.py` (Claude Haiku + rule-based fallback)
-- `backend/app/jobs/daily_crawl.py` (cron entrypoint), `backend/app/jobs/seed_sources.py` (whitelist nguồn)
+- `backend/app/services/crawl_service.py` (**LÕI** crawl+diff+verify+set extracted_dates), `backend/app/services/verify_service.py` (Claude Haiku + rule-based fallback)
+- `backend/app/services/date_extract.py` (**regex trích ngày** JP/VN/ISO + gán nhãn — KHÔNG LLM)
+- `backend/app/models/exam_event.py` + `backend/app/api/v1/events.py` + `backend/app/repositories/exam_event_repo.py` (lịch có cấu trúc)
+- `backend/app/jobs/daily_crawl.py` (cron entrypoint), `backend/app/jobs/seed_sources.py` (whitelist nguồn), `backend/app/jobs/seed_events.py` (**seed lịch chuẩn JLPT** — ngày xác thực từ nguồn chính thức)
 - `mobile/lib/core/background/announcement_alarm.dart` (**callback poll tin** tự re-arm + `checkAnnouncementsNow`)
 - `mobile/lib/features/announcements/data/announcement_scheduler.dart` (alarm 1 lần/ngày, copy mẫu digest)
 - `mobile/lib/features/announcements/data/announcement_repository.dart` (nối backend + dedup Drift `seen_announcements`)
-- `mobile/lib/features/announcements/presentation/screens/announcements_screen.dart` (UI list + cài đặt + nút test)
+- `mobile/lib/features/announcements/domain/entities/exam_event.dart` + `event_status.dart` (**computeStatus** còn hạn/hết hạn client-side)
+- `mobile/lib/features/announcements/data/event_repository.dart` (**merge** lịch backend + `event_overrides`, bản sửa tay ưu tiên) + `event_remote_data_source.dart`
+- `mobile/lib/features/announcements/presentation/widgets/event_edit_dialog.dart` (Sửa/Thêm mốc — 4 date picker)
+- `mobile/lib/features/announcements/presentation/screens/announcements_screen.dart` (UI list + cài đặt + nút test + section "📅 Lịch & hạn")
 - `mobile/lib/main.dart`, `mobile/lib/core/app_router.dart`, `mobile/lib/core/network/api_client.dart`
 - `mobile/lib/core/config/app_config.dart` (API key + ngưỡng tinh chỉnh)
 - `mobile/lib/core/background/background_triggers.dart` (**`applyBackgroundTriggers`** — FG bật: FG + alarm exact backstop song song, hủy WorkManager; FG tắt: alarm + WorkManager)
