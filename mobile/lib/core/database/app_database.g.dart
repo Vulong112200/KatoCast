@@ -1985,6 +1985,618 @@ class SeenAnnouncementsCompanion extends UpdateCompanion<SeenAnnouncementRow> {
   }
 }
 
+class $EventOverridesTable extends EventOverrides
+    with TableInfo<$EventOverridesTable, EventOverrideRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $EventOverridesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _sourceEventIdMeta = const VerificationMeta(
+    'sourceEventId',
+  );
+  @override
+  late final GeneratedColumn<int> sourceEventId = GeneratedColumn<int>(
+    'source_event_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _topicMeta = const VerificationMeta('topic');
+  @override
+  late final GeneratedColumn<String> topic = GeneratedColumn<String>(
+    'topic',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('custom'),
+  );
+  static const VerificationMeta _sessionLabelMeta = const VerificationMeta(
+    'sessionLabel',
+  );
+  @override
+  late final GeneratedColumn<String> sessionLabel = GeneratedColumn<String>(
+    'session_label',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _regStartMeta = const VerificationMeta(
+    'regStart',
+  );
+  @override
+  late final GeneratedColumn<DateTime> regStart = GeneratedColumn<DateTime>(
+    'reg_start',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _regEndMeta = const VerificationMeta('regEnd');
+  @override
+  late final GeneratedColumn<DateTime> regEnd = GeneratedColumn<DateTime>(
+    'reg_end',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _examDateMeta = const VerificationMeta(
+    'examDate',
+  );
+  @override
+  late final GeneratedColumn<DateTime> examDate = GeneratedColumn<DateTime>(
+    'exam_date',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _resultDateMeta = const VerificationMeta(
+    'resultDate',
+  );
+  @override
+  late final GeneratedColumn<DateTime> resultDate = GeneratedColumn<DateTime>(
+    'result_date',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _noteMeta = const VerificationMeta('note');
+  @override
+  late final GeneratedColumn<String> note = GeneratedColumn<String>(
+    'note',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    sourceEventId,
+    topic,
+    sessionLabel,
+    regStart,
+    regEnd,
+    examDate,
+    resultDate,
+    note,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'event_overrides';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<EventOverrideRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('source_event_id')) {
+      context.handle(
+        _sourceEventIdMeta,
+        sourceEventId.isAcceptableOrUnknown(
+          data['source_event_id']!,
+          _sourceEventIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('topic')) {
+      context.handle(
+        _topicMeta,
+        topic.isAcceptableOrUnknown(data['topic']!, _topicMeta),
+      );
+    }
+    if (data.containsKey('session_label')) {
+      context.handle(
+        _sessionLabelMeta,
+        sessionLabel.isAcceptableOrUnknown(
+          data['session_label']!,
+          _sessionLabelMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_sessionLabelMeta);
+    }
+    if (data.containsKey('reg_start')) {
+      context.handle(
+        _regStartMeta,
+        regStart.isAcceptableOrUnknown(data['reg_start']!, _regStartMeta),
+      );
+    }
+    if (data.containsKey('reg_end')) {
+      context.handle(
+        _regEndMeta,
+        regEnd.isAcceptableOrUnknown(data['reg_end']!, _regEndMeta),
+      );
+    }
+    if (data.containsKey('exam_date')) {
+      context.handle(
+        _examDateMeta,
+        examDate.isAcceptableOrUnknown(data['exam_date']!, _examDateMeta),
+      );
+    }
+    if (data.containsKey('result_date')) {
+      context.handle(
+        _resultDateMeta,
+        resultDate.isAcceptableOrUnknown(data['result_date']!, _resultDateMeta),
+      );
+    }
+    if (data.containsKey('note')) {
+      context.handle(
+        _noteMeta,
+        note.isAcceptableOrUnknown(data['note']!, _noteMeta),
+      );
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  List<Set<GeneratedColumn>> get uniqueKeys => [
+    {sourceEventId},
+  ];
+  @override
+  EventOverrideRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return EventOverrideRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      sourceEventId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}source_event_id'],
+      ),
+      topic: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}topic'],
+      )!,
+      sessionLabel: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}session_label'],
+      )!,
+      regStart: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}reg_start'],
+      ),
+      regEnd: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}reg_end'],
+      ),
+      examDate: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}exam_date'],
+      ),
+      resultDate: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}result_date'],
+      ),
+      note: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}note'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $EventOverridesTable createAlias(String alias) {
+    return $EventOverridesTable(attachedDatabase, alias);
+  }
+}
+
+class EventOverrideRow extends DataClass
+    implements Insertable<EventOverrideRow> {
+  final int id;
+  final int? sourceEventId;
+  final String topic;
+  final String sessionLabel;
+  final DateTime? regStart;
+  final DateTime? regEnd;
+  final DateTime? examDate;
+  final DateTime? resultDate;
+  final String note;
+  final DateTime updatedAt;
+  const EventOverrideRow({
+    required this.id,
+    this.sourceEventId,
+    required this.topic,
+    required this.sessionLabel,
+    this.regStart,
+    this.regEnd,
+    this.examDate,
+    this.resultDate,
+    required this.note,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    if (!nullToAbsent || sourceEventId != null) {
+      map['source_event_id'] = Variable<int>(sourceEventId);
+    }
+    map['topic'] = Variable<String>(topic);
+    map['session_label'] = Variable<String>(sessionLabel);
+    if (!nullToAbsent || regStart != null) {
+      map['reg_start'] = Variable<DateTime>(regStart);
+    }
+    if (!nullToAbsent || regEnd != null) {
+      map['reg_end'] = Variable<DateTime>(regEnd);
+    }
+    if (!nullToAbsent || examDate != null) {
+      map['exam_date'] = Variable<DateTime>(examDate);
+    }
+    if (!nullToAbsent || resultDate != null) {
+      map['result_date'] = Variable<DateTime>(resultDate);
+    }
+    map['note'] = Variable<String>(note);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  EventOverridesCompanion toCompanion(bool nullToAbsent) {
+    return EventOverridesCompanion(
+      id: Value(id),
+      sourceEventId: sourceEventId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(sourceEventId),
+      topic: Value(topic),
+      sessionLabel: Value(sessionLabel),
+      regStart: regStart == null && nullToAbsent
+          ? const Value.absent()
+          : Value(regStart),
+      regEnd: regEnd == null && nullToAbsent
+          ? const Value.absent()
+          : Value(regEnd),
+      examDate: examDate == null && nullToAbsent
+          ? const Value.absent()
+          : Value(examDate),
+      resultDate: resultDate == null && nullToAbsent
+          ? const Value.absent()
+          : Value(resultDate),
+      note: Value(note),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory EventOverrideRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return EventOverrideRow(
+      id: serializer.fromJson<int>(json['id']),
+      sourceEventId: serializer.fromJson<int?>(json['sourceEventId']),
+      topic: serializer.fromJson<String>(json['topic']),
+      sessionLabel: serializer.fromJson<String>(json['sessionLabel']),
+      regStart: serializer.fromJson<DateTime?>(json['regStart']),
+      regEnd: serializer.fromJson<DateTime?>(json['regEnd']),
+      examDate: serializer.fromJson<DateTime?>(json['examDate']),
+      resultDate: serializer.fromJson<DateTime?>(json['resultDate']),
+      note: serializer.fromJson<String>(json['note']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'sourceEventId': serializer.toJson<int?>(sourceEventId),
+      'topic': serializer.toJson<String>(topic),
+      'sessionLabel': serializer.toJson<String>(sessionLabel),
+      'regStart': serializer.toJson<DateTime?>(regStart),
+      'regEnd': serializer.toJson<DateTime?>(regEnd),
+      'examDate': serializer.toJson<DateTime?>(examDate),
+      'resultDate': serializer.toJson<DateTime?>(resultDate),
+      'note': serializer.toJson<String>(note),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  EventOverrideRow copyWith({
+    int? id,
+    Value<int?> sourceEventId = const Value.absent(),
+    String? topic,
+    String? sessionLabel,
+    Value<DateTime?> regStart = const Value.absent(),
+    Value<DateTime?> regEnd = const Value.absent(),
+    Value<DateTime?> examDate = const Value.absent(),
+    Value<DateTime?> resultDate = const Value.absent(),
+    String? note,
+    DateTime? updatedAt,
+  }) => EventOverrideRow(
+    id: id ?? this.id,
+    sourceEventId: sourceEventId.present
+        ? sourceEventId.value
+        : this.sourceEventId,
+    topic: topic ?? this.topic,
+    sessionLabel: sessionLabel ?? this.sessionLabel,
+    regStart: regStart.present ? regStart.value : this.regStart,
+    regEnd: regEnd.present ? regEnd.value : this.regEnd,
+    examDate: examDate.present ? examDate.value : this.examDate,
+    resultDate: resultDate.present ? resultDate.value : this.resultDate,
+    note: note ?? this.note,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  EventOverrideRow copyWithCompanion(EventOverridesCompanion data) {
+    return EventOverrideRow(
+      id: data.id.present ? data.id.value : this.id,
+      sourceEventId: data.sourceEventId.present
+          ? data.sourceEventId.value
+          : this.sourceEventId,
+      topic: data.topic.present ? data.topic.value : this.topic,
+      sessionLabel: data.sessionLabel.present
+          ? data.sessionLabel.value
+          : this.sessionLabel,
+      regStart: data.regStart.present ? data.regStart.value : this.regStart,
+      regEnd: data.regEnd.present ? data.regEnd.value : this.regEnd,
+      examDate: data.examDate.present ? data.examDate.value : this.examDate,
+      resultDate: data.resultDate.present
+          ? data.resultDate.value
+          : this.resultDate,
+      note: data.note.present ? data.note.value : this.note,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('EventOverrideRow(')
+          ..write('id: $id, ')
+          ..write('sourceEventId: $sourceEventId, ')
+          ..write('topic: $topic, ')
+          ..write('sessionLabel: $sessionLabel, ')
+          ..write('regStart: $regStart, ')
+          ..write('regEnd: $regEnd, ')
+          ..write('examDate: $examDate, ')
+          ..write('resultDate: $resultDate, ')
+          ..write('note: $note, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    sourceEventId,
+    topic,
+    sessionLabel,
+    regStart,
+    regEnd,
+    examDate,
+    resultDate,
+    note,
+    updatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is EventOverrideRow &&
+          other.id == this.id &&
+          other.sourceEventId == this.sourceEventId &&
+          other.topic == this.topic &&
+          other.sessionLabel == this.sessionLabel &&
+          other.regStart == this.regStart &&
+          other.regEnd == this.regEnd &&
+          other.examDate == this.examDate &&
+          other.resultDate == this.resultDate &&
+          other.note == this.note &&
+          other.updatedAt == this.updatedAt);
+}
+
+class EventOverridesCompanion extends UpdateCompanion<EventOverrideRow> {
+  final Value<int> id;
+  final Value<int?> sourceEventId;
+  final Value<String> topic;
+  final Value<String> sessionLabel;
+  final Value<DateTime?> regStart;
+  final Value<DateTime?> regEnd;
+  final Value<DateTime?> examDate;
+  final Value<DateTime?> resultDate;
+  final Value<String> note;
+  final Value<DateTime> updatedAt;
+  const EventOverridesCompanion({
+    this.id = const Value.absent(),
+    this.sourceEventId = const Value.absent(),
+    this.topic = const Value.absent(),
+    this.sessionLabel = const Value.absent(),
+    this.regStart = const Value.absent(),
+    this.regEnd = const Value.absent(),
+    this.examDate = const Value.absent(),
+    this.resultDate = const Value.absent(),
+    this.note = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+  });
+  EventOverridesCompanion.insert({
+    this.id = const Value.absent(),
+    this.sourceEventId = const Value.absent(),
+    this.topic = const Value.absent(),
+    required String sessionLabel,
+    this.regStart = const Value.absent(),
+    this.regEnd = const Value.absent(),
+    this.examDate = const Value.absent(),
+    this.resultDate = const Value.absent(),
+    this.note = const Value.absent(),
+    required DateTime updatedAt,
+  }) : sessionLabel = Value(sessionLabel),
+       updatedAt = Value(updatedAt);
+  static Insertable<EventOverrideRow> custom({
+    Expression<int>? id,
+    Expression<int>? sourceEventId,
+    Expression<String>? topic,
+    Expression<String>? sessionLabel,
+    Expression<DateTime>? regStart,
+    Expression<DateTime>? regEnd,
+    Expression<DateTime>? examDate,
+    Expression<DateTime>? resultDate,
+    Expression<String>? note,
+    Expression<DateTime>? updatedAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (sourceEventId != null) 'source_event_id': sourceEventId,
+      if (topic != null) 'topic': topic,
+      if (sessionLabel != null) 'session_label': sessionLabel,
+      if (regStart != null) 'reg_start': regStart,
+      if (regEnd != null) 'reg_end': regEnd,
+      if (examDate != null) 'exam_date': examDate,
+      if (resultDate != null) 'result_date': resultDate,
+      if (note != null) 'note': note,
+      if (updatedAt != null) 'updated_at': updatedAt,
+    });
+  }
+
+  EventOverridesCompanion copyWith({
+    Value<int>? id,
+    Value<int?>? sourceEventId,
+    Value<String>? topic,
+    Value<String>? sessionLabel,
+    Value<DateTime?>? regStart,
+    Value<DateTime?>? regEnd,
+    Value<DateTime?>? examDate,
+    Value<DateTime?>? resultDate,
+    Value<String>? note,
+    Value<DateTime>? updatedAt,
+  }) {
+    return EventOverridesCompanion(
+      id: id ?? this.id,
+      sourceEventId: sourceEventId ?? this.sourceEventId,
+      topic: topic ?? this.topic,
+      sessionLabel: sessionLabel ?? this.sessionLabel,
+      regStart: regStart ?? this.regStart,
+      regEnd: regEnd ?? this.regEnd,
+      examDate: examDate ?? this.examDate,
+      resultDate: resultDate ?? this.resultDate,
+      note: note ?? this.note,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (sourceEventId.present) {
+      map['source_event_id'] = Variable<int>(sourceEventId.value);
+    }
+    if (topic.present) {
+      map['topic'] = Variable<String>(topic.value);
+    }
+    if (sessionLabel.present) {
+      map['session_label'] = Variable<String>(sessionLabel.value);
+    }
+    if (regStart.present) {
+      map['reg_start'] = Variable<DateTime>(regStart.value);
+    }
+    if (regEnd.present) {
+      map['reg_end'] = Variable<DateTime>(regEnd.value);
+    }
+    if (examDate.present) {
+      map['exam_date'] = Variable<DateTime>(examDate.value);
+    }
+    if (resultDate.present) {
+      map['result_date'] = Variable<DateTime>(resultDate.value);
+    }
+    if (note.present) {
+      map['note'] = Variable<String>(note.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('EventOverridesCompanion(')
+          ..write('id: $id, ')
+          ..write('sourceEventId: $sourceEventId, ')
+          ..write('topic: $topic, ')
+          ..write('sessionLabel: $sessionLabel, ')
+          ..write('regStart: $regStart, ')
+          ..write('regEnd: $regEnd, ')
+          ..write('examDate: $examDate, ')
+          ..write('resultDate: $resultDate, ')
+          ..write('note: $note, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -1996,6 +2608,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $NoteItemsTable noteItems = $NoteItemsTable(this);
   late final $SeenAnnouncementsTable seenAnnouncements =
       $SeenAnnouncementsTable(this);
+  late final $EventOverridesTable eventOverrides = $EventOverridesTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -2006,6 +2619,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     notes,
     noteItems,
     seenAnnouncements,
+    eventOverrides,
   ];
 }
 
@@ -3083,6 +3697,307 @@ typedef $$SeenAnnouncementsTableProcessedTableManager =
       SeenAnnouncementRow,
       PrefetchHooks Function()
     >;
+typedef $$EventOverridesTableCreateCompanionBuilder =
+    EventOverridesCompanion Function({
+      Value<int> id,
+      Value<int?> sourceEventId,
+      Value<String> topic,
+      required String sessionLabel,
+      Value<DateTime?> regStart,
+      Value<DateTime?> regEnd,
+      Value<DateTime?> examDate,
+      Value<DateTime?> resultDate,
+      Value<String> note,
+      required DateTime updatedAt,
+    });
+typedef $$EventOverridesTableUpdateCompanionBuilder =
+    EventOverridesCompanion Function({
+      Value<int> id,
+      Value<int?> sourceEventId,
+      Value<String> topic,
+      Value<String> sessionLabel,
+      Value<DateTime?> regStart,
+      Value<DateTime?> regEnd,
+      Value<DateTime?> examDate,
+      Value<DateTime?> resultDate,
+      Value<String> note,
+      Value<DateTime> updatedAt,
+    });
+
+class $$EventOverridesTableFilterComposer
+    extends Composer<_$AppDatabase, $EventOverridesTable> {
+  $$EventOverridesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get sourceEventId => $composableBuilder(
+    column: $table.sourceEventId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get topic => $composableBuilder(
+    column: $table.topic,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get sessionLabel => $composableBuilder(
+    column: $table.sessionLabel,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get regStart => $composableBuilder(
+    column: $table.regStart,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get regEnd => $composableBuilder(
+    column: $table.regEnd,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get examDate => $composableBuilder(
+    column: $table.examDate,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get resultDate => $composableBuilder(
+    column: $table.resultDate,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get note => $composableBuilder(
+    column: $table.note,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$EventOverridesTableOrderingComposer
+    extends Composer<_$AppDatabase, $EventOverridesTable> {
+  $$EventOverridesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get sourceEventId => $composableBuilder(
+    column: $table.sourceEventId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get topic => $composableBuilder(
+    column: $table.topic,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get sessionLabel => $composableBuilder(
+    column: $table.sessionLabel,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get regStart => $composableBuilder(
+    column: $table.regStart,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get regEnd => $composableBuilder(
+    column: $table.regEnd,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get examDate => $composableBuilder(
+    column: $table.examDate,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get resultDate => $composableBuilder(
+    column: $table.resultDate,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get note => $composableBuilder(
+    column: $table.note,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$EventOverridesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $EventOverridesTable> {
+  $$EventOverridesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<int> get sourceEventId => $composableBuilder(
+    column: $table.sourceEventId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get topic =>
+      $composableBuilder(column: $table.topic, builder: (column) => column);
+
+  GeneratedColumn<String> get sessionLabel => $composableBuilder(
+    column: $table.sessionLabel,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get regStart =>
+      $composableBuilder(column: $table.regStart, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get regEnd =>
+      $composableBuilder(column: $table.regEnd, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get examDate =>
+      $composableBuilder(column: $table.examDate, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get resultDate => $composableBuilder(
+    column: $table.resultDate,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get note =>
+      $composableBuilder(column: $table.note, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$EventOverridesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $EventOverridesTable,
+          EventOverrideRow,
+          $$EventOverridesTableFilterComposer,
+          $$EventOverridesTableOrderingComposer,
+          $$EventOverridesTableAnnotationComposer,
+          $$EventOverridesTableCreateCompanionBuilder,
+          $$EventOverridesTableUpdateCompanionBuilder,
+          (
+            EventOverrideRow,
+            BaseReferences<
+              _$AppDatabase,
+              $EventOverridesTable,
+              EventOverrideRow
+            >,
+          ),
+          EventOverrideRow,
+          PrefetchHooks Function()
+        > {
+  $$EventOverridesTableTableManager(
+    _$AppDatabase db,
+    $EventOverridesTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$EventOverridesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$EventOverridesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$EventOverridesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<int?> sourceEventId = const Value.absent(),
+                Value<String> topic = const Value.absent(),
+                Value<String> sessionLabel = const Value.absent(),
+                Value<DateTime?> regStart = const Value.absent(),
+                Value<DateTime?> regEnd = const Value.absent(),
+                Value<DateTime?> examDate = const Value.absent(),
+                Value<DateTime?> resultDate = const Value.absent(),
+                Value<String> note = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+              }) => EventOverridesCompanion(
+                id: id,
+                sourceEventId: sourceEventId,
+                topic: topic,
+                sessionLabel: sessionLabel,
+                regStart: regStart,
+                regEnd: regEnd,
+                examDate: examDate,
+                resultDate: resultDate,
+                note: note,
+                updatedAt: updatedAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<int?> sourceEventId = const Value.absent(),
+                Value<String> topic = const Value.absent(),
+                required String sessionLabel,
+                Value<DateTime?> regStart = const Value.absent(),
+                Value<DateTime?> regEnd = const Value.absent(),
+                Value<DateTime?> examDate = const Value.absent(),
+                Value<DateTime?> resultDate = const Value.absent(),
+                Value<String> note = const Value.absent(),
+                required DateTime updatedAt,
+              }) => EventOverridesCompanion.insert(
+                id: id,
+                sourceEventId: sourceEventId,
+                topic: topic,
+                sessionLabel: sessionLabel,
+                regStart: regStart,
+                regEnd: regEnd,
+                examDate: examDate,
+                resultDate: resultDate,
+                note: note,
+                updatedAt: updatedAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$EventOverridesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $EventOverridesTable,
+      EventOverrideRow,
+      $$EventOverridesTableFilterComposer,
+      $$EventOverridesTableOrderingComposer,
+      $$EventOverridesTableAnnotationComposer,
+      $$EventOverridesTableCreateCompanionBuilder,
+      $$EventOverridesTableUpdateCompanionBuilder,
+      (
+        EventOverrideRow,
+        BaseReferences<_$AppDatabase, $EventOverridesTable, EventOverrideRow>,
+      ),
+      EventOverrideRow,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -3097,4 +4012,6 @@ class $AppDatabaseManager {
       $$NoteItemsTableTableManager(_db, _db.noteItems);
   $$SeenAnnouncementsTableTableManager get seenAnnouncements =>
       $$SeenAnnouncementsTableTableManager(_db, _db.seenAnnouncements);
+  $$EventOverridesTableTableManager get eventOverrides =>
+      $$EventOverridesTableTableManager(_db, _db.eventOverrides);
 }

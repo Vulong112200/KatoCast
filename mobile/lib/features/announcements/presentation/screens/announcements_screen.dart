@@ -7,8 +7,11 @@ import '../../../../core/background/announcement_alarm.dart';
 import '../../data/announcement_prefs_store.dart';
 import '../../data/announcement_scheduler.dart';
 import '../../domain/entities/announcement.dart';
+import '../../domain/entities/exam_event.dart';
+import '../../domain/entities/event_status.dart';
 import '../../../../shared/widgets/app_error_widget.dart';
 import '../providers/announcements_providers.dart';
+import '../widgets/event_edit_dialog.dart';
 
 /// Màn "Theo dõi thông báo" — danh sách tin (JLPT/MBA…) + cài đặt theo dõi.
 class AnnouncementsScreen extends ConsumerWidget {
@@ -39,6 +42,13 @@ class AnnouncementsScreen extends ConsumerWidget {
           children: [
             const _SettingsCard(),
             const SizedBox(height: 8),
+            const _EventsSection(),
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+              child: Text('Tin mới từ nguồn chính thức',
+                  style: Theme.of(context).textTheme.titleSmall),
+            ),
             listAsync.when(
               loading: () => const Padding(
                 padding: EdgeInsets.all(24),
@@ -92,6 +102,18 @@ class _AnnouncementTile extends StatelessWidget {
                 padding: const EdgeInsets.only(top: 2),
                 child: Text(a.summary),
               ),
+            if (a.extractedDates.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  '📅 Ngày trong tin (chưa kiểm chứng): '
+                  '${a.extractedDates.map((d) => '${d.labelVi} ${d.date}').join(' · ')}',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: scheme.outline,
+                        fontStyle: FontStyle.italic,
+                      ),
+                ),
+              ),
             const SizedBox(height: 4),
             Row(
               children: [
@@ -127,6 +149,162 @@ class _AnnouncementTile extends StatelessWidget {
       );
     }
   }
+}
+
+/// Section "Lịch & hạn" — lịch có cấu trúc (đăng ký/thi/kết quả) + trạng thái.
+class _EventsSection extends ConsumerWidget {
+  const _EventsSection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final async = ref.watch(examEventsProvider);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text('📅 Lịch & hạn',
+                  style: Theme.of(context).textTheme.titleSmall),
+            ),
+            TextButton.icon(
+              icon: const Icon(Icons.add, size: 18),
+              label: const Text('Thêm mốc'),
+              onPressed: () => _openEditor(context, ref, null),
+            ),
+          ],
+        ),
+        async.when(
+          loading: () => const Padding(
+            padding: EdgeInsets.all(16),
+            child: Center(child: CircularProgressIndicator()),
+          ),
+          error: (e, _) => AppErrorWidget(
+            error: e,
+            onRetry: () => ref.invalidate(examEventsProvider),
+          ),
+          data: (events) => events.isEmpty
+              ? const Padding(
+                  padding: EdgeInsets.all(12),
+                  child: Text(
+                    'Chưa có lịch nào. Bấm "Thêm mốc" để tự nhập, hoặc lịch '
+                    'chuẩn sẽ tự tải khi bật chủ đề tương ứng 🐾',
+                  ),
+                )
+              : Column(children: [for (final e in events) _EventCard(e)]),
+        ),
+      ],
+    );
+  }
+}
+
+class _EventCard extends ConsumerWidget {
+  final ExamEvent event;
+  const _EventCard(this.event);
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final scheme = Theme.of(context).colorScheme;
+    final status = computeStatus(event, DateTime.now());
+    final chipColor = switch (status.level) {
+      StatusLevel.danger => Colors.red,
+      StatusLevel.warning => Colors.orange,
+      StatusLevel.good => Colors.green,
+      StatusLevel.neutral => scheme.outline,
+    };
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(event.sessionLabel,
+                      style: Theme.of(context).textTheme.titleMedium),
+                ),
+                IconButton(
+                  tooltip: 'Sửa mốc',
+                  icon: const Icon(Icons.edit_outlined, size: 20),
+                  onPressed: () => _openEditor(context, ref, event),
+                ),
+              ],
+            ),
+            // chip trạng thái tổng
+            Container(
+              margin: const EdgeInsets.only(top: 2, bottom: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: chipColor.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(status.summaryLabel,
+                  style: TextStyle(color: chipColor, fontWeight: FontWeight.w600)),
+            ),
+            for (final line in status.lines)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 2),
+                child: Text(line, style: Theme.of(context).textTheme.bodyMedium),
+              ),
+            if (event.note.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(event.note,
+                    style: Theme.of(context).textTheme.bodySmall),
+              ),
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                Icon(
+                  event.isTrusted ? Icons.verified : Icons.help_outline,
+                  size: 14,
+                  color: event.isTrusted ? scheme.primary : Colors.orange,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  event.isUserVerified
+                      ? 'bạn đã sửa'
+                      : event.curated
+                          ? 'đã kiểm chứng'
+                          : 'tự động',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const Spacer(),
+                if (event.sourceUrl.isNotEmpty)
+                  TextButton(
+                    onPressed: () => _open(context, event.sourceUrl),
+                    child: Text('Nguồn: ${event.sourceDomain}',
+                        overflow: TextOverflow.ellipsis),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _open(BuildContext context, String url) async {
+    final uri = Uri.tryParse(url);
+    if (uri == null) return;
+    final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!ok && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Không mở được liên kết nguồn.')),
+      );
+    }
+  }
+}
+
+/// Mở dialog sửa/thêm mốc; [base] null = thêm mới custom.
+Future<void> _openEditor(
+    BuildContext context, WidgetRef ref, ExamEvent? base) async {
+  final saved = await showDialog<bool>(
+    context: context,
+    builder: (_) => EventEditDialog(base: base),
+  );
+  if (saved == true) ref.invalidate(examEventsProvider);
 }
 
 /// Thẻ cài đặt: bật/tắt, mốc giờ kiểm tra, chủ đề theo dõi, nút test.

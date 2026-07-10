@@ -4,6 +4,31 @@
 /// `sourceUrl` + `sourceDomain` luôn là nguồn chính thức để người dùng tự kiểm
 /// chứng (chống tin giả). `contentHash` ổn định theo nội dung → khoá chống báo
 /// lại ở phía app.
+/// Một mốc ngày tự phát hiện (regex) trong tin — GỢI Ý, CHƯA kiểm chứng.
+/// [label] ∈ registration | exam | deadline | result | unknown.
+class ExtractedDate {
+  final String date; // ISO YYYY-MM-DD
+  final String label;
+  final String raw;
+
+  const ExtractedDate({required this.date, required this.label, this.raw = ''});
+
+  factory ExtractedDate.fromJson(Map<String, dynamic> json) => ExtractedDate(
+        date: json['date'] as String? ?? '',
+        label: json['label'] as String? ?? 'unknown',
+        raw: json['raw'] as String? ?? '',
+      );
+
+  /// Nhãn tiếng Việt gọn cho UI.
+  String get labelVi => switch (label) {
+        'registration' => 'đăng ký',
+        'exam' => 'thi',
+        'deadline' => 'hạn',
+        'result' => 'kết quả',
+        _ => 'ngày',
+      };
+}
+
 class Announcement {
   final int id;
   final String topic; // jlpt | mba | custom
@@ -16,6 +41,9 @@ class Announcement {
   final bool verified;
   final double score;
 
+  /// Ngày regex tự phát hiện trong tin (chưa kiểm chứng). Có thể rỗng.
+  final List<ExtractedDate> extractedDates;
+
   const Announcement({
     required this.id,
     required this.topic,
@@ -27,9 +55,18 @@ class Announcement {
     required this.contentHash,
     required this.verified,
     required this.score,
+    this.extractedDates = const [],
   });
 
   factory Announcement.fromJson(Map<String, dynamic> json) {
+    final rawDates = json['extracted_dates'];
+    final dates = rawDates is List
+        ? rawDates
+            .whereType<Map<String, dynamic>>()
+            .map(ExtractedDate.fromJson)
+            .where((d) => d.date.isNotEmpty)
+            .toList()
+        : const <ExtractedDate>[];
     return Announcement(
       id: (json['id'] as num).toInt(),
       topic: json['topic'] as String? ?? 'custom',
@@ -43,6 +80,7 @@ class Announcement {
       contentHash: json['content_hash'] as String? ?? '',
       verified: json['verified'] as bool? ?? false,
       score: (json['score'] as num?)?.toDouble() ?? 0.0,
+      extractedDates: dates,
     );
   }
 }

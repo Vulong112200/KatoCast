@@ -95,8 +95,39 @@ class SeenAnnouncements extends Table {
       ];
 }
 
-@DriftDatabase(
-    tables: [WeatherCache, FixedRoutePoints, Notes, NoteItems, SeenAnnouncements])
+/// Bản SỬA/THÊM của người dùng cho lịch (ExamEvent). Người dùng luôn ưu tiên
+/// hơn dữ liệu backend → dùng để ghi đè mốc ngày sai hoặc thêm mốc còn thiếu.
+///
+/// `sourceEventId` = id của ExamEvent backend đang ghi đè (null = event tự thêm,
+/// không gắn với backend). Khoá tự nhiên `sourceEventId` (SQLite cho phép nhiều
+/// NULL nên các event tự thêm không đụng nhau).
+@DataClassName('EventOverrideRow')
+class EventOverrides extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get sourceEventId => integer().nullable()();
+  TextColumn get topic => text().withDefault(const Constant('custom'))();
+  TextColumn get sessionLabel => text()();
+  DateTimeColumn get regStart => dateTime().nullable()();
+  DateTimeColumn get regEnd => dateTime().nullable()();
+  DateTimeColumn get examDate => dateTime().nullable()();
+  DateTimeColumn get resultDate => dateTime().nullable()();
+  TextColumn get note => text().withDefault(const Constant(''))();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  List<Set<Column>> get uniqueKeys => [
+        {sourceEventId},
+      ];
+}
+
+@DriftDatabase(tables: [
+  WeatherCache,
+  FixedRoutePoints,
+  Notes,
+  NoteItems,
+  SeenAnnouncements,
+  EventOverrides,
+])
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
@@ -104,7 +135,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forExecutor(super.executor);
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -118,6 +149,10 @@ class AppDatabase extends _$AppDatabase {
           // v2 → v3: theo dõi thông báo (JLPT/MBA…) — bảng đã-thấy.
           if (from < 3) {
             await m.createTable(seenAnnouncements);
+          }
+          // v3 → v4: lịch & mốc hạn — bản sửa/thêm của người dùng.
+          if (from < 4) {
+            await m.createTable(eventOverrides);
           }
         },
       );
