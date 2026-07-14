@@ -184,8 +184,12 @@ class _KatoCastAppState extends ConsumerState<KatoCastApp> {
               'Trên một số máy (Nubia/MyOS, Xiaomi/HyperOS, Oppo…), khi bạn '
               'VUỐT TẮT app khỏi danh sách gần đây, hệ điều hành sẽ dừng app và '
               'HỦY mọi thông báo hẹn giờ (bản tin, nhắc ghi chú, cảnh báo mưa).\n\n'
-              'Để KatoAssistant báo đúng giờ kể cả sau khi vuốt tắt, hãy:\n'
-              '1) Bật "Tự khởi động" (Autostart) cho KatoAssistant.\n'
+              'CÁCH CHẮC CHẮN NHẤT: ĐỪNG vuốt tắt app, hoặc KHÓA app trong màn '
+              'hình gần đây — mở recent apps, vuốt xuống / giữ thẻ KatoAssistant '
+              'rồi chọn biểu tượng khóa 🔒. Khi đã khóa, thao tác "Xóa tất cả" sẽ '
+              'không giết app nữa.\n\n'
+              'Ngoài ra hãy bật thêm để app sống ổn định:\n'
+              '1) "Tự khởi động" (Autostart) cho KatoAssistant.\n'
               '2) Đặt pin ở chế độ "Không giới hạn".',
             ),
           ),

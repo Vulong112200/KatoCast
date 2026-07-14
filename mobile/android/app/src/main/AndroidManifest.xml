@@ -80,10 +80,15 @@
             android:name="com.dexterous.flutterlocalnotifications.ActionBroadcastReceiver" />
 
         <!-- flutter_foreground_task: service giữ app chạy nền. KHÔNG đổi tên
-             service. foregroundServiceType phải khớp quyền đã khai báo ở trên. -->
+             service. foregroundServiceType phải khớp quyền đã khai báo ở trên.
+             stopWithTask=false: khi người dùng VUỐT TẮT app (task removal), giữ
+             foreground service (và thông báo ghim) sống thay vì dừng theo task.
+             Có hiệu lực trên OEM chỉ task-removal; OEM force-stop toàn tiến trình
+             (Nubia/MyOS) vẫn giết được — khi đó cần khóa app trong recents. -->
         <service
             android:name="com.pravera.flutter_foreground_task.service.ForegroundService"
             android:foregroundServiceType="dataSync"
+            android:stopWithTask="false"
             android:exported="false" />
 
         <!-- android_alarm_manager_plus (4.0.x có manifest RỖNG → APP PHẢI tự khai

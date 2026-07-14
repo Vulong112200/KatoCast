@@ -106,10 +106,12 @@ main._bootstrap CÒN gọi runWeatherCheck() NGAY (fire-and-forget) → cảnh b
 LỚP ĐANG HOẠT ĐỘNG gọi runWeatherCheck (isolate riêng tự dựng DI):
   • foreground_service: onRepeatEvent mỗi intervalMinutes (5/10/15/30'), allowWakeLock
       (allowWifiLock=false); _tick RE-ASSERT ghim ghi chú TRƯỚC rồi runWeatherCheck
-  • weather_alarm: oneShotAt exact+allowWhileIdle, LUÔN tự re-arm (backstop thường trực)
+  • weather_alarm: oneShotAt exact+allowWhileIdle, LUÔN tự re-arm (backstop thường trực);
+      _run cũng HỒI SINH FG service (nếu prefs bật mà isRunningService==false)
   • WorkManager periodic (clamp ≥15'): chỉ khi FG tắt
-   ▼ ⚠️ Vuốt tắt app trên OEM (Nubia/MyOS…) = force-stop → hủy sạch alarm+FG; chỉ cứu bằng
-   ▼    bật Tự khởi động + Không giới hạn pin (onboarding + MainActivity MethodChannel katocast/oem)
+   ▼ ⚠️ Vuốt tắt app trên OEM (Nubia/MyOS…) = force-stop → hủy sạch alarm+FG; chắc chắn nhất là
+   ▼    KHÓA app trong recents 🔒 (hoặc đừng vuốt tắt) + bật Tự khởi động + Không giới hạn pin.
+   ▼    FG service khai báo stopWithTask=false (chỉ cứu ca task-removal, không cứu force-stop)
 runWeatherCheck (core/background/weather_check.dart):
    resolveBackgroundCoords (last-known ≤24h / fallback LastLocationStore) → null → dừng
    ▼  GUARD QUOTA bám chu kỳ: getCachedWeather → cache tươi hơn (intervalMinutes−1') → DÙNG CACHE,

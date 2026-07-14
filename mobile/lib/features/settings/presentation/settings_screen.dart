@@ -119,8 +119,11 @@ class SettingsScreen extends ConsumerWidget {
               'KatoAssistant kiểm tra thời tiết định kỳ kể cả khi bạn đã tắt app. '
               'Nhiều hãng (Nubia/MyOS, Xiaomi/HyperOS, Oppo, vivo…) khi bạn VUỐT '
               'TẮT app khỏi màn hình gần đây sẽ dừng app và HỦY mọi thông báo hẹn '
-              'giờ. Để thông báo hoạt động ổn định, hãy BẬT "Tự khởi động" và đặt '
-              'pin ở chế độ "Không giới hạn" cho KatoAssistant.',
+              'giờ. CÁCH CHẮC CHẮN NHẤT: đừng vuốt tắt app, hoặc KHÓA app trong '
+              'màn hình gần đây (mở recent apps → vuốt xuống / giữ thẻ '
+              'KatoAssistant → chọn biểu tượng khóa 🔒); khi đã khóa, "Xóa tất cả" '
+              'sẽ không giết app. Nên bật thêm "Tự khởi động" và đặt pin "Không '
+              'giới hạn" cho KatoAssistant.',
             ),
           ),
           SwitchListTile(

@@ -2,8 +2,11 @@ import 'package:android_alarm_manager_plus/android_alarm_manager_plus.dart';
 
 import '../../features/notes/data/note_notification_service.dart';
 import '../database/app_database.dart';
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
+
 import '../notifications/notification_service.dart';
 import 'background_prefs.dart';
+import 'foreground_service.dart';
 import 'weather_check.dart';
 
 /// ID alarm kiểm tra thời tiết (khác các ID bản tin 1005/1006 và ID ghi chú).
@@ -52,6 +55,19 @@ void weatherAlarmCallback() {
 Future<void> _run() async {
   try {
     await _reassertNotes();
+  } catch (_) {}
+  // Hồi sinh foreground service nếu người dùng đang bật FG mà service không còn
+  // chạy — xảy ra khi FG bị Doze/OEM giết (mà tiến trình CHƯA force-stop) hoặc
+  // khi tiến trình được relaunch qua boot/broadcast (Autostart). Khôi phục lại
+  // thông báo ghim + cập nhật liên tục mà không phải chờ người dùng mở app.
+  // Best-effort: khởi động FG từ isolate alarm có thể bị hạn chế trên vài
+  // Android → nuốt lỗi. (Force-stop toàn tiến trình thì alarm này cũng không
+  // chạy, nên đây chỉ cứu được ca Doze-kill, không cứu được swipe force-stop.)
+  try {
+    if (await BackgroundPrefsStore().foregroundEnabled() &&
+        !await FlutterForegroundTask.isRunningService) {
+      await startWeatherForegroundService();
+    }
   } catch (_) {}
   // Ngoài khung giờ hoạt động → KHÔNG lấy dữ liệu (mát máy, tiết kiệm quota).
   // Vẫn re-arm bên dưới, và mốc kế tiếp sẽ neo vào giờ mở khung.
