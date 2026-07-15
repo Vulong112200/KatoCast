@@ -58,7 +58,7 @@ class NotificationSettingsController extends StateNotifier<DigestPrefs> {
   /// làm crash UI hay chặn việc đã lưu cài đặt — state + store vẫn giữ nguyên.
   Future<void> _reschedule() async {
     try {
-      await scheduleDigests(state);
+      await scheduleDigests(state, force: true);
     } catch (e) {
       debugPrint('KatoCast: scheduleDigests lỗi: $e');
     }

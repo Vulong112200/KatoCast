@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:android_alarm_manager_plus/android_alarm_manager_plus.dart';
 import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flutter/material.dart';
@@ -104,20 +106,20 @@ class _KatoCastAppState extends ConsumerState<KatoCastApp> {
     //     foreground service lẫn alarm sống sót.
     await _promptBatteryIfNeeded();
 
-    // 3. Lập lịch bản tin hằng ngày qua alarm hệ thống (đáng tin hơn
-    //    WorkManager). Nội dung lấy từ cache mới nhất; mỗi lần worker chạy /
-    //    đổi cài đặt sẽ lập lịch lại để nội dung tươi nhất có thể.
-    await _rescheduleDigests();
-
-    // 4. Ghi chú: hiện lại notification ghim (mất sau reboot / "Xoá tất cả"
-    //    trên Android 14) + lập lại lịch nhắc theo trạng thái DB — đồng bộ cả
-    //    khi "Đã đọc" được bấm lúc app tắt.
-    try {
-      await reassertNoteNotifications(
-        ref.read(appDatabaseProvider),
-        ref.read(notificationServiceProvider),
-      );
-    } catch (_) {}
+    // 3. Lập lịch bản tin hằng ngày + 4. hồi phục ghim/lịch ghi chú.
+    //    KHÔNG await nối tiếp: cả hai đều thực hiện nhiều lời gọi binder
+    //    AlarmManager/notification — chạy fire-and-forget để không giữ luồng
+    //    chính (tránh ANR "App không hoạt động"); thứ tự với nhau không quan
+    //    trọng vì mỗi hàm tự dựng dependency riêng.
+    unawaited(_rescheduleDigests());
+    unawaited(() async {
+      try {
+        await reassertNoteNotifications(
+          ref.read(appDatabaseProvider),
+          ref.read(notificationServiceProvider),
+        );
+      } catch (_) {}
+    }());
 
     // 4b. Chạy kiểm tra thời tiết NGAY khi mở app (một lần) → khởi tạo trạng
     //     thái cảnh báo (AlertStateStore) + bắn cảnh báo tức thì nếu đang
@@ -218,7 +220,7 @@ class _KatoCastAppState extends ConsumerState<KatoCastApp> {
       // Chỉ cần lập lịch alarm đúng mốc giờ theo cài đặt; nội dung sẽ được
       // callback tự fetch tươi lúc bắn nên KHÔNG cần đợi weatherProvider ở đây.
       final prefs = await NotificationPrefsStore().read();
-      await scheduleDigests(prefs);
+      await scheduleDigests(prefs, force: true);
     } catch (_) {
       // Lỗi lập lịch (vd nền tảng không hỗ trợ AlarmManager) → bỏ qua.
     }

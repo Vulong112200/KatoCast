@@ -23,12 +23,24 @@ const int kWeatherAlarmId = 2001;
 /// Neo mốc kế tiếp theo KHUNG GIỜ HOẠT ĐỘNG: nếu hiện đang TRONG khung → chu kỳ
 /// bình thường (`now + interval`); nếu NGOÀI khung → nhảy thẳng tới giờ MỞ khung
 /// kế tiếp (ví dụ 5:00 sáng) để không đá CPU dậy vô ích suốt đêm.
-Future<void> scheduleWeatherAlarm() async {
+/// Số phút thử lại SỚM khi lần fetch nền vừa rồi thất bại (trả cache cũ) — để
+/// buổi sáng bắt được dữ liệu tươi ngay khi radio tỉnh, không phải đợi hết chu
+/// kỳ đầy (mặc định 15').
+const int kFallbackRetryMinutes = 5;
+
+/// [retrySoon] = true khi lần `runWeatherCheck` vừa rồi chỉ có cache cũ (fetch
+/// thất bại) → đặt mốc kế tiếp gần hơn (tối đa [kFallbackRetryMinutes]) thay vì
+/// cả chu kỳ, để mau có dữ liệu tươi.
+Future<void> scheduleWeatherAlarm({bool retrySoon = false}) async {
   final now = DateTime.now();
   final DateTime fireAt;
   if (await isWithinActiveHours(now)) {
     final interval = await BackgroundPrefsStore().intervalMinutes();
-    fireAt = now.add(Duration(minutes: interval));
+    final minutes =
+        retrySoon && interval > kFallbackRetryMinutes
+            ? kFallbackRetryMinutes
+            : interval;
+    fireAt = now.add(Duration(minutes: minutes));
   } else {
     fireAt = await nextActiveWindowStart(now);
   }
@@ -71,16 +83,19 @@ Future<void> _run() async {
   } catch (_) {}
   // Ngoài khung giờ hoạt động → KHÔNG lấy dữ liệu (mát máy, tiết kiệm quota).
   // Vẫn re-arm bên dưới, và mốc kế tiếp sẽ neo vào giờ mở khung.
+  var retrySoon = false;
   try {
     if (await isWithinActiveHours(DateTime.now())) {
-      await runWeatherCheck();
+      final data = await runWeatherCheck();
+      // Fetch nền thất bại (chỉ có cache cũ) → thử lại sớm ở lần re-arm.
+      retrySoon = data?.fromCacheFallback ?? false;
     }
   } catch (_) {}
   // Re-arm cho chu kỳ kế tiếp (one-shot không tự lặp). Alarm exact là BACKSTOP
   // thường trực (chạy cả khi FG bật) → luôn tự re-arm. Guard quota trong
   // runWeatherCheck khử gọi API trùng với FG tick nên không tốn thêm hạn mức.
   try {
-    await scheduleWeatherAlarm();
+    await scheduleWeatherAlarm(retrySoon: retrySoon);
   } catch (_) {}
 }
 

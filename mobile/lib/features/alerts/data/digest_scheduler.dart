@@ -1,11 +1,27 @@
 import 'package:android_alarm_manager_plus/android_alarm_manager_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:permission_handler/permission_handler.dart' as ph;
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/background/digest_alarm.dart';
 import '../../../core/config/app_config.dart';
 import '../../../core/notifications/notification_service.dart';
 import 'notification_prefs_store.dart';
+
+// Trạng thái lập lịch gần nhất (SharedPreferences) — để throttle self-heal và
+// biết đã đặt bao nhiêu slot (hủy đúng slot thừa, không quét blanket 64).
+const String _kLastScheduleMsKey = 'digest_last_schedule_ms';
+const String _kScheduledCountKey = 'digest_scheduled_count';
+
+/// Khoảng throttle self-heal: các lời gọi nền (tick FG mỗi 15') KHÔNG lập lại
+/// lịch thường xuyên hơn mức này — vừa tránh ANR (burst binder call) vừa tránh
+/// race hủy-rồi-đặt-lại clobber mốc sắp nổ. App mở / đổi cài đặt gọi `force`.
+const int _kMinRescheduleGapMs = 60 * 60 * 1000; // 1 giờ
+
+/// Cửa sổ "vừa qua": nếu mốc hôm nay đã qua trong khoảng này, KHÔNG đụng vào
+/// alarm của mốc đó (để callback tự re-arm ngày mai) — tránh dời nhầm mốc sáng
+/// sang ngày mai khi self-heal chạy sát giờ nổ.
+const int _kJustPassedGraceMinutes = 20;
 
 /// Lập lịch (hoặc huỷ) các bản tin hằng ngày qua alarm hệ thống
 /// (android_alarm_manager_plus). Danh sách mốc giờ tùy ý → mỗi mốc một alarm ID
@@ -23,21 +39,56 @@ import 'notification_prefs_store.dart';
 /// vốn INEXACT và KHÔNG allow-while-idle, nên trong Doze mốc sáng bị hoãn tới
 /// cửa sổ bảo trì → "không nổ". Vì one-shot không tự lặp, [digestAlarmCallback]
 /// phải tự đặt lại mốc ngày mai (xem `scheduleDigestSlot`).
-Future<void> scheduleDigests(DigestPrefs prefs) async {
+/// [force] = true khi người dùng chủ động (mở app / đổi cài đặt): bỏ qua
+/// throttle để áp lịch mới ngay. Lời gọi nền (tick FG) để mặc định false → chỉ
+/// self-heal tối đa 1 lần/giờ, tránh ANR và tránh clobber mốc sắp nổ.
+Future<void> scheduleDigests(DigestPrefs prefs, {bool force = false}) async {
+  final sp = await SharedPreferences.getInstance();
+  final nowMs = DateTime.now().millisecondsSinceEpoch;
+  if (!force) {
+    final lastMs = sp.getInt(_kLastScheduleMsKey) ?? 0;
+    if (lastMs != 0 && nowMs - lastMs < _kMinRescheduleGapMs) return;
+  }
+
   // Hủy mô hình CŨ (2 mốc cố định) một lần — an toàn kể cả khi chưa từng đặt.
   await AndroidAlarmManager.cancel(NotificationIds.dailyDigestMorning);
   await AndroidAlarmManager.cancel(NotificationIds.dailyDigestEvening);
 
-  // Hủy toàn dải động trước khi đặt lại (idempotent + dọn mốc đã xóa).
-  for (var i = 0; i < AppConfig.digestMaxSlots; i++) {
+  final desired = prefs.enabled ? prefs.times.length : 0;
+  // Số slot đã đặt lần trước: lần ĐẦU (chưa có key) quét toàn dải một lần để dọn
+  // alarm cũ từ phiên bản trước; các lần sau chỉ hủy tới max(prev, desired) —
+  // KHÔNG blanket 64 mỗi lần (nguồn ANR).
+  final prevCount = sp.getInt(_kScheduledCountKey) ?? AppConfig.digestMaxSlots;
+  final cancelUpTo = prevCount > desired ? prevCount : desired;
+  for (var i = desired; i < cancelUpTo && i < AppConfig.digestMaxSlots; i++) {
     await AndroidAlarmManager.cancel(NotificationIds.digestBase + i);
   }
 
-  if (!prefs.enabled) return;
-
-  for (var i = 0; i < prefs.times.length; i++) {
-    await scheduleDigestSlot(NotificationIds.digestBase + i, prefs.times[i]);
+  if (prefs.enabled) {
+    final now = DateTime.now();
+    for (var i = 0; i < prefs.times.length; i++) {
+      // Tránh CLOBBER: mốc hôm nay vừa qua trong grace window → để nguyên alarm
+      // đang chờ/đã nổ (callback tự re-arm ngày mai) thay vì dời sang mai.
+      if (_justPassed(now, prefs.times[i])) continue;
+      await scheduleDigestSlot(NotificationIds.digestBase + i, prefs.times[i]);
+    }
   }
+
+  await sp.setInt(_kLastScheduleMsKey, nowMs);
+  await sp.setInt(_kScheduledCountKey, desired);
+}
+
+/// Mốc [minutesOfDay] hôm nay có vừa trôi qua trong [_kJustPassedGraceMinutes]?
+bool _justPassed(DateTime now, int minutesOfDay) {
+  final target = DateTime(
+    now.year,
+    now.month,
+    now.day,
+    minutesOfDay ~/ 60,
+    minutesOfDay % 60,
+  );
+  final diff = now.difference(target).inMinutes;
+  return diff >= 0 && diff <= _kJustPassedGraceMinutes;
 }
 
 /// Đặt một alarm one-shot cho mốc kế tiếp của [minutesOfDay].

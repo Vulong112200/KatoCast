@@ -141,8 +141,13 @@ String foregroundStatusText(WeatherData data) {
   final tempStr = c.tempC != null ? '${c.tempC!.round()}°C' : '—';
   final uvi = c.uvi;
   final uvStr = uvi != null ? ' · UV ${UvAdvice.classify(uvi).level}' : '';
+  // Dữ liệu chưa làm mới được (fetch fail → cache cũ) HOẶC quá tuổi cảnh báo →
+  // báo trung thực "dữ liệu cũ" thay vì để giờ `fetchedAt` cũ trông như mới.
+  final stale = data.fromCacheFallback ||
+      data.age.inMinutes > AppConfig.alertMaxDataAgeMinutes;
+  final staleStr = stale ? ' · ⚠️ dữ liệu cũ' : '';
   return '${condition.emoji} $tempStr · ${condition.label}'
-      '$uvStr · cập nhật ${_hhmm(data.fetchedAt)}';
+      '$uvStr · cập nhật ${_hhmm(data.fetchedAt)}$staleStr';
 }
 
 /// Định dạng giờ "HH:mm" theo giờ máy (thủ công, không cần `intl`).

@@ -67,7 +67,13 @@ class WeatherRepositoryImpl implements WeatherRepository {
     final cached = await _local.read(coords);
     if (cached == null) return Left(fallbackFailure);
     final (json, fetchedAt) = cached;
-    return Right(WeatherMapper.fromOneCallJson(json, fetchedAt: fetchedAt));
+    // Đánh dấu fromCacheFallback: đây là cache CŨ trả về vì fetch remote lỗi,
+    // KHÔNG phải dữ liệu tươi — caller cần biết để báo trung thực.
+    return Right(WeatherMapper.fromOneCallJson(
+      json,
+      fetchedAt: fetchedAt,
+      fromCacheFallback: true,
+    ));
   }
 }
 

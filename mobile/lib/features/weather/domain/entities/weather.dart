@@ -73,10 +73,17 @@ class WeatherData {
   /// Thời điểm dữ liệu được lấy (dùng hiển thị "cập nhật lúc ..." khi offline).
   final DateTime fetchedAt;
 
+  /// `true` khi dữ liệu này là CACHE CŨ trả về do fetch remote thất bại
+  /// (offline/Doze/lỗi server), KHÔNG phải lần gọi API tươi. Dùng để caller
+  /// (foreground notif, alarm backstop) biết dữ liệu chưa được làm mới thật sự
+  /// và báo trung thực "dữ liệu cũ" thay vì hiển thị `fetchedAt` như thể mới.
+  final bool fromCacheFallback;
+
   const WeatherData({
     required this.current,
     required this.minutely,
     required this.hourly,
     required this.fetchedAt,
+    this.fromCacheFallback = false,
   });
 }

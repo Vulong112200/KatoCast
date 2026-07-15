@@ -174,12 +174,20 @@ class WeatherScreen extends ConsumerWidget {
   }
 
   Widget _staleBadge(BuildContext context, DateTime fetchedAt, bool offline) {
+    final local = fetchedAt.toLocal();
+    // Đồng hồ máy có thể vừa nhảy lùi (NTP) khiến fetchedAt thành TƯƠNG LAI →
+    // đừng hiện mốc giờ tương lai gây hoang mang; coi như "vừa cập nhật".
+    final isFuture = local.isAfter(DateTime.now());
     final time =
-        '${fetchedAt.hour.toString().padLeft(2, '0')}:${fetchedAt.minute.toString().padLeft(2, '0')}';
+        '${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
     // Offline thật → nói rõ offline; còn online mà dữ liệu cũ → đang làm mới.
     final msg = offline
-        ? 'Đang offline — hiển thị dữ liệu lúc $time'
-        : 'Dữ liệu lúc $time · đang làm mới…';
+        ? (isFuture
+            ? 'Đang offline — dữ liệu vừa cập nhật'
+            : 'Đang offline — hiển thị dữ liệu lúc $time')
+        : (isFuture
+            ? 'Vừa cập nhật · đang làm mới…'
+            : 'Dữ liệu lúc $time · đang làm mới…');
     return Container(
       width: double.infinity,
       color: Colors.orange.withValues(alpha: 0.15),

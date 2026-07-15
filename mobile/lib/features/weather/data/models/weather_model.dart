@@ -14,12 +14,14 @@ class WeatherMapper {
   static WeatherData fromOneCallJson(
     Map<String, dynamic> json, {
     required DateTime fetchedAt,
+    bool fromCacheFallback = false,
   }) {
     return WeatherData(
       current: _current(_asMap(json['current'])),
       minutely: _minutelyList(json['minutely']),
       hourly: _hourlyList(json['hourly']),
       fetchedAt: fetchedAt,
+      fromCacheFallback: fromCacheFallback,
     );
   }
 
