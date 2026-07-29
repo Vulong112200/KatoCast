@@ -35,6 +35,18 @@ class ApiClient {
     return ApiClient._(dio);
   }
 
+  /// Đóng client + giải phóng connection pool.
+  ///
+  /// BẮT BUỘC gọi ở các isolate NỀN: mỗi chu kỳ nền tạo một `ApiClient` mới, nếu
+  /// không đóng thì mỗi 15' lại rò một `HttpClient` + pool socket suốt cả ngày.
+  void close() {
+    try {
+      dio.close(force: true);
+    } catch (_) {
+      // Đã đóng / chưa từng dùng → bỏ qua.
+    }
+  }
+
   static DioException _mapError(DioException e) {
     switch (e.type) {
       case DioExceptionType.connectionTimeout:

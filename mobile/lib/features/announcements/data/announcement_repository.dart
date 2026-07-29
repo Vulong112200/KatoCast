@@ -42,6 +42,12 @@ class AnnouncementRepository {
   }
 
   /// Đánh dấu đã hiển thị (idempotent nhờ unique contentHash).
+  ///
+  /// Gọi TRƯỚC khi hiển thị thông báo, không phải sau. Lý do: nếu hiển thị xong
+  /// mới ghi mà lượt ghi thất bại (DB đang bị isolate khác khoá) thì tin đã hiện
+  /// nhưng không được ghi nhận → lần poll sau BÁO LẠI đúng tin đó. Đặt trước rồi
+  /// gọi [unmarkSeen] để bù trừ nếu hiển thị lỗi thì lỗi tệ nhất chỉ là bỏ sót
+  /// một tin, thay vì báo trùng làm phiền người dùng.
   Future<void> markSeen(Iterable<Announcement> items) async {
     final now = DateTime.now();
     await _db.batch((b) {
@@ -58,5 +64,15 @@ class AnnouncementRepository {
         mode: InsertMode.insertOrIgnore,
       );
     });
+  }
+
+  /// Bỏ đánh dấu đã-thấy (bù trừ khi hiển thị thông báo thất bại) → tin sẽ được
+  /// thử lại ở lượt poll sau.
+  Future<void> unmarkSeen(Iterable<Announcement> items) async {
+    final hashes = items.map((a) => a.contentHash).toList();
+    if (hashes.isEmpty) return;
+    await (_db.delete(_db.seenAnnouncements)
+          ..where((t) => t.contentHash.isIn(hashes)))
+        .go();
   }
 }

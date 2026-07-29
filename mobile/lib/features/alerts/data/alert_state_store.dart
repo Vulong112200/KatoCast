@@ -4,7 +4,17 @@ import '../../weather/domain/entities/rain_status.dart';
 import '../../weather/domain/entities/weather_condition.dart';
 
 /// Lưu trạng thái cảnh báo lần trước (SharedPreferences) để chống spam.
-/// Dùng được ở cả background isolate (tự đọc SharedPreferences riêng).
+///
+/// Đây là cơ chế chống-báo-trùng DUY NHẤT cho cảnh báo thời tiết, và nó phải
+/// đúng qua RANH GIỚI ISOLATE: foreground service, alarm exact và WorkManager là
+/// ba isolate khác nhau nhưng cùng đọc/ghi trạng thái này.
+///
+/// `SharedPreferences.getInstance()` trả về một bản cache trong bộ nhớ RIÊNG của
+/// từng isolate, chỉ nạp từ đĩa ở lần khởi tạo đầu. Isolate của foreground
+/// service sống hàng giờ, nên nếu không `reload()` thì nó **không bao giờ thấy**
+/// những gì isolate alarm đã ghi — và cứ phát lại cảnh báo dựa trên `notifiedAt`
+/// cũ. Đó chính là lý do một tin bị thông báo nhiều lần. Vì vậy [read] LUÔN
+/// `reload()` trước khi đọc.
 class AlertStateStore {
   static const _kPhase = 'alert_last_rain_phase';
   static const _kCategory = 'alert_last_condition_category';
@@ -21,6 +31,8 @@ class AlertStateStore {
         bool envNotified,
       })> read() async {
     final prefs = await SharedPreferences.getInstance();
+    // BẮT BUỘC: nạp lại từ đĩa để thấy trạng thái do isolate khác ghi.
+    await prefs.reload();
     return (
       phase: _enumOrNull(prefs.getInt(_kPhase), RainPhase.values),
       category: _enumOrNull(prefs.getInt(_kCategory), WeatherCategory.values),

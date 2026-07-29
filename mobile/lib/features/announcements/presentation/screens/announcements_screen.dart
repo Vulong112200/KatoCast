@@ -340,7 +340,8 @@ class _SettingsBody extends ConsumerWidget {
 
     Future<void> reschedule() async {
       final p = await store.read();
-      await scheduleAnnouncementCheck(p);
+      // force: người dùng vừa đổi cài đặt → bỏ qua throttle self-heal để áp ngay.
+      await scheduleAnnouncementCheck(p, force: true);
       ref.invalidate(announcementPrefsProvider);
     }
 

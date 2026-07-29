@@ -1,6 +1,9 @@
 import 'package:dartz/dartz.dart';
 
 import '../../../../core/config/app_config.dart';
+import '../../../../core/diagnostics/app_log.dart';
+import '../../../../core/diagnostics/log_entry.dart';
+import '../../../../core/diagnostics/log_tags.dart';
 import '../../../../core/error/exceptions.dart';
 import '../../../../core/error/failures.dart';
 import '../../../../core/network/network_info.dart';
@@ -19,7 +22,15 @@ class WeatherRepositoryImpl implements WeatherRepository {
   final WeatherLocalDataSource _local;
   final NetworkInfo _network;
 
-  WeatherRepositoryImpl(this._remote, this._local, this._network);
+  /// Lớp gọi (xem `LogSource`) — chỉ để nhật ký ghi rõ ai đã gọi API.
+  final String logSource;
+
+  WeatherRepositoryImpl(
+    this._remote,
+    this._local,
+    this._network, {
+    this.logSource = LogSource.ui,
+  });
 
   @override
   Future<Either<Failure, WeatherData>> getWeather(
@@ -30,26 +41,56 @@ class WeatherRepositoryImpl implements WeatherRepository {
 
     // Nếu offline → đi thẳng vào cache.
     if (!online) {
+      await AppLog.w(
+        logSource,
+        LogTags.fetch,
+        'đang OFFLINE → dùng cache nếu có',
+      );
       return _fromCacheOr(coords, const NetworkFailure());
     }
 
+    final startedAt = DateTime.now();
     try {
       final json = await _remote.fetchOneCall(coords);
       final now = DateTime.now();
       await _local.cache(coords, json, now);
+      await AppLog.i(
+        logSource,
+        LogTags.fetch,
+        'gọi API OK (3 endpoint One Call 4.0)',
+        data: {'mất': '${now.difference(startedAt).inMilliseconds}ms'},
+      );
       return Right(WeatherMapper.fromOneCallJson(json, fetchedAt: now));
-    } on NetworkException {
+    } on NetworkException catch (e) {
+      await _logFetchFailure('lỗi mạng', e, startedAt);
       return _fromCacheOr(coords, const NetworkFailure());
     } on ServerException catch (e) {
+      await _logFetchFailure('lỗi máy chủ (${e.statusCode})', e, startedAt);
       // Lỗi server: vẫn thử cache (nếu có) để app dùng được, nếu không trả lỗi.
       return _fromCacheOr(
         coords,
         ServerFailure(e.message, statusCode: e.statusCode),
       );
-    } catch (_) {
+    } catch (e) {
+      await _logFetchFailure('lỗi không lường trước', e, startedAt);
       return _fromCacheOr(coords, const UnexpectedFailure());
     }
   }
+
+  Future<void> _logFetchFailure(
+    String what,
+    Object error,
+    DateTime startedAt,
+  ) =>
+      AppLog.w(
+        logSource,
+        LogTags.fetch,
+        'gọi API THẤT BẠI: $what → thử cache',
+        data: {
+          'mất': '${DateTime.now().difference(startedAt).inMilliseconds}ms',
+          'err': error.toString(),
+        },
+      );
 
   @override
   Future<WeatherData?> getCachedWeather(Coordinates coords) async {
@@ -65,8 +106,21 @@ class WeatherRepositoryImpl implements WeatherRepository {
     Failure fallbackFailure,
   ) async {
     final cached = await _local.read(coords);
-    if (cached == null) return Left(fallbackFailure);
+    if (cached == null) {
+      await AppLog.w(
+        logSource,
+        LogTags.fetch,
+        'không có cache cho toạ độ này → trả lỗi',
+      );
+      return Left(fallbackFailure);
+    }
     final (json, fetchedAt) = cached;
+    await AppLog.w(
+      logSource,
+      LogTags.fetch,
+      'dùng CACHE CŨ thay cho dữ liệu tươi (fromCacheFallback)',
+      data: {'lấy lúc': fetchedAt.toLocal().toString()},
+    );
     // Đánh dấu fromCacheFallback: đây là cache CŨ trả về vì fetch remote lỗi,
     // KHÔNG phải dữ liệu tươi — caller cần biết để báo trung thực.
     return Right(WeatherMapper.fromOneCallJson(

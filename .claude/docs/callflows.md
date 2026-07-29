@@ -98,30 +98,54 @@ MapScreen → flutter_map (tile OSM + lớp mưa OWM) center theo currentLocatio
 ### 2. Thông báo thông minh (background → LÕI runWeatherCheck)
 ```
 applyBackgroundTriggers() [main._bootstrap + backgroundSettingsProvider khi đổi cài đặt]:
-   ▼ đọc BackgroundPrefsStore.foregroundEnabled
-   ├─ BẬT  → startWeatherForegroundService + scheduleWeatherAlarm (BACKSTOP song song);
-   │          BackgroundScheduler.cancel (bỏ WorkManager). FG chính + alarm cứu khi FG bị giết.
-   └─ TẮT  → stopWeatherForegroundService; BackgroundScheduler.initialize + scheduleWeatherAlarm
-main._bootstrap CÒN gọi runWeatherCheck() NGAY (fire-and-forget) → cảnh báo tức thì + init AlertStateStore.
-LỚP ĐANG HOẠT ĐỘNG gọi runWeatherCheck (isolate riêng tự dựng DI):
-  • foreground_service: onRepeatEvent mỗi intervalMinutes (5/10/15/30'), allowWakeLock
-      (allowWifiLock=false); _tick RE-ASSERT ghim ghi chú TRƯỚC rồi runWeatherCheck
-  • weather_alarm: oneShotAt exact+allowWhileIdle, LUÔN tự re-arm (backstop thường trực);
-      _run cũng HỒI SINH FG service (nếu prefs bật mà isRunningService==false)
-  • WorkManager periodic (clamp ≥15'): chỉ khi FG tắt
+   ▼ đọc BackgroundPrefsStore (foregroundEnabled + intervalMinutes)
+   ├─ foregroundEnabled? → startWeatherForegroundService : stopWeatherForegroundService
+   ├─ BackgroundScheduler.initialize   ← WorkManager LUÔN bật (lịch do JobScheduler HĐH giữ)
+   └─ scheduleWeatherAlarm(firstDelayMinutes: FG bật ? interval/2 : null)  ← TÁCH PHA
+       (arm alarm lệch NỬA chu kỳ để nó nằm giữa hai tick FG → backstop đúng nghĩa;
+        trước đây arm liền sau khi start FG nên hai lớp tick cùng lúc mãi mãi)
+main._bootstrap CÒN gọi CycleLock.runGuarded(ui, runWeatherCheck) NGAY (fire-and-forget)
+   + scheduleDigests(force) + scheduleAnnouncementCheck(force) + AppLog "mở app".
+
+BA LỚP đều gọi runWeatherCheck (isolate riêng tự dựng DI), MỖI LỚP:
+   ▼ AppLog.i(src, cycle) → isWithinActiveHours?
+   ├─ NGOÀI khung → không mở DB, không lấy dữ liệu
+   │     • foreground_service: VẪN updateService "đang nghỉ (05:00–21:00)" (không đóng băng text cũ)
+   │     • weather_alarm: chặng đêm — hồi sinh FG nếu chết + tự chữa lịch bản tin
+   └─ TRONG khung → CycleLock.runGuarded(src, ...):     ← CHỐNG CHẠY CHỒNG (lock bằng FILE)
+         không lấy được lock → AppLog "bỏ lượt: chu kỳ đang chạy bởi <chủ>", VẪN re-arm alarm
+         lấy được → MỘT AppDatabase cho cả chu kỳ:
+            reassertNoteNotifications(db)  →  runWeatherCheck(source, db)  →  db.close()
+  • foreground_service: onRepeatEvent mỗi intervalMinutes (5/10/15/30'), allowWakeLock,
+      allowWifiLock=false
+  • weather_alarm (id 2001): oneShotAt exact+allowWhileIdle, LUÔN tự re-arm dù phần trên lỗi;
+      ghi mốc kế tiếp vào kWeatherAlarmNextMsKey; hồi sinh FG chỉ khi isRunningService==false
+      (KHÔNG restartService — nó reset pha FG về pha alarm, chính là nguồn dính pha)
+      ▼ re-arm: TRONG khung → now+interval (hoặc +5' nếu fromCacheFallback);
+                NGOÀI khung → sớm hơn trong (now+kNightHopInterval 2h, nextActiveWindowStart)
+                ← chặng đêm: mất một chặng chỉ mất 2h, thay vì cả đêm treo trên 1 alarm
+  • WorkManager periodic (clamp ≥15', LUÔN bật): WATCHDOG — weatherAlarmChainStatus().overdue
+      (mốc đã đặt trôi qua >5') → scheduleWeatherAlarm dựng lại chuỗi đã đứt
    ▼ ⚠️ Vuốt tắt app trên OEM (Nubia/MyOS…) = force-stop → hủy sạch alarm+FG; chắc chắn nhất là
    ▼    KHÓA app trong recents 🔒 (hoặc đừng vuốt tắt) + bật Tự khởi động + Không giới hạn pin.
    ▼    FG service khai báo stopWithTask=false (chỉ cứu ca task-removal, không cứu force-stop)
-runWeatherCheck (core/background/weather_check.dart):
-   resolveBackgroundCoords (last-known ≤24h / fallback LastLocationStore) → null → dừng
+runWeatherCheck(source, db) (core/background/weather_check.dart):
+   resolveBackgroundCoords(source) → AppLog toạ độ + NGUỒN (lastKnown/store) + tuổi; null → dừng
+   ▼  purge cache cũ: CHỈ 1 LẦN/NGÀY, trong try (trước đây mỗi chu kỳ & NGOÀI try nên một lỗi
+   │  `database is locked` ở đây làm sập cả chu kỳ, bị catch(_) nuốt → mất dữ liệu + thông báo)
    ▼  GUARD QUOTA bám chu kỳ: getCachedWeather → cache tươi hơn (intervalMinutes−1') → DÙNG CACHE,
-   │  KHÔNG gọi API; ngược lại getWeather (luôn gọi remote khi online)
+   │  KHÔNG gọi API; ngược lại getWeather → AppLog kết quả API (thời lượng / lỗi / fallback cache)
    ▼  (data.age > 45' → BỎ sinh cảnh báo, nhảy tới bước lập lịch digest)
 AnalyzeRain(now) [KẾT HỢP 3 NGUỒN: quan trắc current ĐÈ nowcast khi trời đã mưa (_obsIndicatesRain);
    │ nowcast khô vẫn đối chiếu hourly (tín hiệu mạnh mm+pop≥0.6 trong cửa sổ / tiêu chí thường ngoài cửa sổ)
    │ → changeAt + rainEndsAt/duration (nối tiếp hourly khi vượt cửa sổ nowcast) + segments (đoạn cường độ)
    │ + probabilityPct] + DetectEnvChange
    ▼
+   ▼ AppLog.i(analyze): pha + tình hình + nguồn (nowcast/hourly) + mốc + giờ tạnh + xác suất
+AlertStateStore.read()  ← LUÔN prefs.reload() (SharedPreferences cache RIÊNG từng isolate; isolate
+   │ FG sống hàng giờ nên không reload thì không bao giờ thấy trạng thái isolate alarm ghi → báo lặp)
+   ▼ cả chuỗi read → show → write nằm TRONG CycleLock (không thì 2 isolate cùng đọc state cũ,
+   │ cùng show → 1 thẻ nhưng 2 lần heads-up + 2 lần âm thanh)
 BuildWeatherAlerts(rain, env, previousPhase + previousChangeAt + previousNotifiedAt từ AlertStateStore)
    │ chỉ sinh alert khi PHA đổi; NGOẠI LỆ khi pha giữ nguyên:
    │  (a) changeAt lệch so lần ĐÃ BÁO: SỚM ≥15' / MUỘN ≥45' (bất đối xứng) → "Cập nhật:" (cùng ID)
@@ -129,10 +153,40 @@ BuildWeatherAlerts(rain, env, previousPhase + previousChangeAt + previousNotifie
    │ nội dung mưa: giờ bắt đầu (HH:MM từ changeAt) + % + giờ tạnh/thời lượng (rainEndsAt)
    │  + "Diễn biến: mưa vừa ~17:00–19:00, sau đó mưa nhỏ..." (describeRainCourse khi ≥2 đoạn)
    ▼
-NotificationService.show(id cố định) → AlertStateStore.write(phase + changeAt/notifiedAt —
-   │ CHỈ chốt mốc mới khi thật sự phát thông báo mưa, tránh drift nuốt ngưỡng "Cập nhật")
+NotificationService.show(id cố định) → AppLog.i(notify, "ĐÃ BÁO: <tiêu đề>" + id + nội dung)
+   │ (không có alert nào → AppLog.i(skip, "chưa có gì đổi" + pha trước/nay + mốc đã báo + báo lúc))
+   ▼
+AlertStateStore.write(phase + changeAt/notifiedAt — CHỈ chốt mốc mới khi thật sự phát thông báo
+   │ mưa, tránh drift nuốt ngưỡng "Cập nhật")
    ▼ (foreground service còn updateService: thông báo thường trực live nhiệt độ + tình hình)
-NotificationPrefsStore.read() → scheduleDigests(prefs)  [re-arm mọi mốc digest mỗi chu kỳ]
+NotificationPrefsStore.read() → scheduleDigests(prefs, source)         ┐ đều qua AlarmScheduleGuard
+AnnouncementPrefsStore.read() → scheduleAnnouncementCheck(ap, source)  ┘ (throttle 1h + justPassed)
+   ▼ mọi bước trên: catch (e, st) → AppLog.e  (KHÔNG còn catch(_) nuốt trần)
+   ▼ finally: ApiClient.close() (không đóng thì mỗi chu kỳ rò một HttpClient + pool socket)
+```
+
+### 2e. Nhật ký hoạt động — ghi ở mọi isolate, đọc ở trang /diagnostics
+```
+[GHI] mọi lớp nền + main isolate:
+   AppLog.i/w/e(source, tag, message, {data})   ← static, không Riverpod, dùng được ở MỌI isolate
+   ▼ _queue (chuỗi hoá trong cùng isolate) → _rotateIfNeeded (>512KB → dồn sang kato.1.log)
+   ▼ File(<appDocs>/logs/kato.log).writeAsString(mode: writeOnlyAppend, flush: true)
+   ▼ KHÔNG dùng Drift — chủ ý: nhật ký phải ghi được ĐÚNG LÚC DB bị khoá (chính là lỗi cần truy),
+   │  và append file cho nhiều isolate ghi song song mà không cần phối hợp lock
+   ▼ mọi lỗi I/O bị nuốt tại đây (chỗ DUY NHẤT được phép) — ghi log không được làm hỏng chu kỳ
+   ▼ isolate nền kết thúc → AppLog.flush() để không mất dòng cuối
+
+[ĐỌC] SettingsScreen → "Nhật ký hoạt động" → context.push('/diagnostics')
+   ▼
+DiagnosticsScreen → logEntriesProvider → AppLog.readAll()
+   │  đọc kato.1.log rồi kato.log → LogEntry.tryParse từng dòng (dòng hỏng → BỎ, không sập trang)
+   │  → bỏ dòng > logRetentionDays(7) → sort mới-nhất-trước → cắt còn logMaxEntries(5000)
+   ├─ logHealthProvider → LogHealth.from(entries): lastCycle/lastFetchOk/lastNotify/nextAlarm
+   │     + thống kê 24h + longestGap24h (bỏ đoạn đầu cửa sổ nếu nhật ký chưa trải hết 24h)
+   ├─ runtimeStatusProvider → BackgroundPrefsStore + isRunningService + canScheduleExactAlarms
+   │     + isIgnoringBatteryOptimizations  → thẻ "Cấu hình & quyền"
+   └─ filteredLogEntriesProvider ← logFilterProvider (Tất cả/Chạy nền/Thông báo/Lỗi) + logSearchProvider
+   ▼ list nhóm theo ngày, màu theo mức · "Copy toàn bộ" (AppLog.exportText → Clipboard) · "Xoá nhật ký"
 ```
 
 ### 2b. Bản tin hằng ngày — NHIỀU MỐC + alarm FETCH TƯƠI tại thời điểm bắn
@@ -170,12 +224,21 @@ TỰ CHẨN ĐOÁN: DigestSettingsCard "Đặt bản tin thử sau 1 phút" → 
         matched? → lưu Announcement(source_domain để kiểm chứng, verified=score≥0.5)
    ▼ GET /api/v1/announcements?topic=&since=  ← mobile tiêu thụ
 
-[MOBILE] lập lịch (idempotent): runWeatherCheck (cạnh scheduleDigests) / đổi cài đặt
-   ▼ scheduleAnnouncementCheck(prefs) → oneShotAt(announcementAlarm=1200) exact+allowWhileIdle (KHÔNG periodic)
-Đến mốc giờ → AlarmManager đánh thức isolate → announcementCheckCallback(id) → _fetchAndNotify:
+[MOBILE] lập lịch (idempotent): runWeatherCheck (cạnh scheduleDigests) / mở app / đổi cài đặt (force)
+   ▼ scheduleAnnouncementCheck(prefs, {force}) → AlarmScheduleGuard.claimSchedule (throttle 1h,
+   │   có prefs.reload) + justPassed (mốc vừa qua ≤20' → để callback tự re-arm, đừng dời sang mai)
+   │   ⚠️ trước đây thiếu CẢ HAI guard này dù bị gọi mỗi chu kỳ → cancel đua với re-arm từ isolate alarm
+   ▼ oneShotAt(announcementAlarm=1200) exact+allowWhileIdle (KHÔNG periodic)
+Đến mốc giờ → AlarmManager đánh thức isolate → announcementCheckCallback(id)
+   → CycleLock.runGuarded(announce, _fetchAndNotify):   ← lượt poll cũng ghi Drift nên phải xếp hàng
    AnnouncementRepository.fetchNewUnseen(topics): fetch backend → lọc bỏ contentHash có trong Drift seen_announcements
-   → mỗi tin mới: NotificationService.showAnnouncement (KatoVoice.announcement + domain nguồn, payload announcement:<id>)
-   → markSeen CHỈ các tin hiển thị THÀNH CÔNG (tin lỗi → thử lại lần sau)
+   → markSeen(fresh) TRƯỚC (một lượt ghi cho cả lô)
+        ⚠️ THỨ TỰ QUAN TRỌNG: trước đây show TRƯỚC rồi mới markSeen — lượt ghi thất bại (DB bị isolate
+        khác khoá) thì tin đã hiện mà không được ghi nhận → lượt poll sau BÁO LẠI đúng tin đó
+   → mỗi tin: NotificationService.showAnnouncement (KatoVoice.announcement + domain nguồn,
+        id = announcementBase + BỘ ĐẾM XOAY VÒNG (không còn remoteId%500 làm hai tin đè nhau),
+        payload announcement:<id>)
+   → show lỗi → unmarkSeen(failed) BÙ TRỪ để lượt sau thử lại
    → RE-ARM: scheduleAnnouncementSlot(id, checkMinutes) cho NGÀY MAI (finally; bỏ nếu !enabled)
 Chạm thông báo → onNotificationTap(payload announcement:) → appRouter.push('/announcements')
    ▼ crawl_service cũng set extracted_dates = date_extract.extract_dates(text) (regex, gợi ý "chưa kiểm chứng")

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../core/config/app_config.dart';
 import '../../../core/di/providers.dart';
@@ -170,6 +171,15 @@ class SettingsScreen extends ConsumerWidget {
             trailing: const Icon(Icons.chevron_right),
             onTap: () =>
                 ref.read(permissionServiceProvider).openAutoStartSettings(),
+          ),
+          ListTile(
+            leading: const Icon(Icons.receipt_long_outlined),
+            title: const Text('Nhật ký hoạt động'),
+            subtitle: const Text(
+                'Xem app đã chạy lúc nào, lấy dữ liệu ra sao, có báo gì — dùng '
+                'để soi vì sao thông báo bị thiếu hoặc bị lặp.'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => context.push('/diagnostics'),
           ),
           ListTile(
             leading: const Icon(Icons.settings_applications_outlined),

@@ -1,4 +1,5 @@
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../features/alerts/data/alert_state_store.dart';
 import '../../features/alerts/data/digest_scheduler.dart';
@@ -16,125 +17,283 @@ import '../../features/weather/domain/usecases/analyze_rain.dart';
 import '../../features/weather/domain/usecases/detect_env_change.dart';
 import '../config/app_config.dart';
 import '../database/app_database.dart';
+import '../diagnostics/app_log.dart';
+import '../diagnostics/log_entry.dart';
+import '../diagnostics/log_tags.dart';
 import '../network/api_client.dart';
 import '../network/network_info.dart';
 import '../notifications/notification_service.dart';
 import 'background_location.dart';
 import 'background_prefs.dart';
 
+/// Khoá SharedPreferences: lần dọn cache thời tiết gần nhất (ms epoch).
+const String _kLastPurgeMsKey = 'weather_cache_last_purge_ms';
+
 /// LÕI kiểm tra thời tiết nền — dùng CHUNG cho cả 3 lớp trigger:
-/// foreground service (chính), alarm exact dự phòng, và WorkManager (backstop).
+/// foreground service (chính), alarm exact backstop, và WorkManager.
 /// Chạy trong isolate riêng nên tự dựng dependency, KHÔNG dùng Riverpod.
 ///
-/// GUARD QUOTA: OWM 4.0 tốn 3 call/refresh, giới hạn 1000/ngày. Vì nhiều
-/// trigger cùng chạy ~15', hàm chỉ gọi API khi cache đã cũ ≥
-/// `AppConfig.minRefreshGapMinutes`; nếu cache còn tươi thì dùng lại (không gọi
-/// API) → các trigger trùng nhau tự khử. Lưu ý: `repo.getWeather` hiện luôn gọi
-/// remote khi online (bỏ qua `forceRefresh`), nên guard PHẢI nằm ở đây.
+/// GUARD QUOTA: OWM 4.0 tốn 3 call/refresh, giới hạn 1000/ngày. Hàm chỉ gọi API
+/// khi cache đã cũ hơn (chu kỳ − 1'); cache còn tươi thì dùng lại. Lưu ý:
+/// `repo.getWeather` luôn gọi remote khi online, nên guard PHẢI nằm ở đây.
 ///
-/// Trả về [WeatherData] đã dùng (để caller như foreground service dựng nội dung
-/// thông báo thường trực), hoặc null nếu không có dữ liệu (thiếu vị trí/offline
-/// & chưa có cache).
-Future<WeatherData?> runWeatherCheck() async {
-  final coords = await resolveBackgroundCoords();
+/// [source] = lớp trigger đang gọi (xem [LogSource]) — chỉ dùng cho nhật ký, để
+/// đọc log biết được LỚP NÀO chạy lúc nào.
+///
+/// [db] cho phép caller TRUYỀN VÀO một `AppDatabase` đang mở để dùng chung.
+/// Trước đây mỗi tick mở 2 `AppDatabase` (một cho re-assert ghi chú, một ở đây),
+/// mỗi lần `NativeDatabase.createInBackground` lại spawn một isolate phụ → 4
+/// isolate DB mỗi 15' khi FG và alarm cùng chạy. Dùng chung một handle giảm cả
+/// rác tiến trình lẫn nguy cơ `database is locked`.
+///
+/// Trả về [WeatherData] đã dùng (để foreground service dựng nội dung thông báo
+/// thường trực), hoặc null nếu không có dữ liệu.
+Future<WeatherData?> runWeatherCheck({
+  String source = LogSource.ui,
+  AppDatabase? db,
+}) async {
+  final coords = await resolveBackgroundCoords(source: source);
   if (coords == null) return null;
 
-  final db = AppDatabase();
+  final ownsDb = db == null;
+  final database = db ?? AppDatabase();
+  final api = ApiClient.create();
   try {
-    final local = WeatherLocalDataSource(db);
-    await local.purgeOlderThan(const Duration(days: AppConfig.cacheMaxAgeDays));
+    final local = WeatherLocalDataSource(database);
+
+    // Dọn cache cũ: chỉ TỐI ĐA 1 LẦN/NGÀY. Trước đây chạy mỗi chu kỳ — một câu
+    // DELETE vô ích ở 95% lần gọi, mà lại là một lượt GHI làm tăng tranh chấp
+    // khoá DB. Bọc try riêng: lỗi dọn dẹp KHÔNG được làm hỏng cả chu kỳ (trước
+    // đây nó nằm ngoài try nên một lỗi `database is locked` ở đây làm mất luôn
+    // dữ liệu + thông báo của chu kỳ, và không để lại dấu vết nào).
+    await _purgeCacheIfDue(local, source);
 
     final repo = WeatherRepositoryImpl(
-      WeatherRemoteDataSource(ApiClient.create()),
+      WeatherRemoteDataSource(api),
       local,
       NetworkInfoImpl(Connectivity()),
+      logSource: source,
     );
 
-    // Guard quota bám theo chu kỳ người dùng chọn: cache còn tươi hơn (chu kỳ −
-    // 1') → không gọi API. Trước đây guard cứng 12' nhằm khử trùng lặp giữa 3
-    // lớp trigger; nay chỉ MỘT lớp chạy tại một thời điểm, nên guard chỉ cần
-    // ngăn double-fire lúc chuyển giao và cho phép chu kỳ ngắn (5') thật sự làm
-    // mới mỗi 5'.
     final interval = await BackgroundPrefsStore().intervalMinutes();
     final gapMinutes = interval > 1 ? interval - 1 : interval;
-    final cached = await repo.getCachedWeather(coords);
     WeatherData? data;
-    if (cached != null && cached.age.inMinutes < gapMinutes) {
-      data = cached;
-    } else {
-      final result = await repo.getWeather(coords);
-      data = result.fold((_) => null, (d) => d);
-    }
-    if (data == null) return null;
-
-    // Các side-effect (sinh cảnh báo + lập lịch bản tin) được bọc try/catch
-    // RIÊNG để một lỗi ở đây KHÔNG làm mất `data`. Quan trọng với foreground
-    // service: nó cần `data` trả về để cập nhật thông báo thường trực — trước
-    // đây `scheduleDigests` ném lỗi trong isolate nền khiến `runWeatherCheck`
-    // văng, `data` không về tới `_tick`, thông báo kẹt mãi ở text khởi tạo.
     try {
-      // Dữ liệu quá cũ (fetch fail → cache cũ) → KHÔNG sinh cảnh báo để tránh
-      // báo pha/giờ sai; vẫn đảm bảo lịch bản tin ở bước cuối.
+      final cached = await repo.getCachedWeather(coords);
+      if (cached != null && cached.age.inMinutes < gapMinutes) {
+        data = cached;
+        await AppLog.i(
+          source,
+          LogTags.source,
+          'DÙNG CACHE (guard quota) — không gọi API',
+          data: {
+            'tuổi': '${cached.age.inMinutes}p',
+            'ngưỡng': '${gapMinutes}p',
+          },
+        );
+      } else {
+        await AppLog.i(
+          source,
+          LogTags.source,
+          'GỌI API — cache thiếu hoặc đã cũ',
+          data: {
+            'tuổi': cached == null ? 'chưa có' : '${cached.age.inMinutes}p',
+            'ngưỡng': '${gapMinutes}p',
+          },
+        );
+        final result = await repo.getWeather(coords);
+        data = result.fold((_) => null, (d) => d);
+      }
+    } catch (e, st) {
+      await AppLog.e(
+        source,
+        LogTags.db,
+        'lỗi khi đọc cache/lấy dữ liệu (có thể do DB bị khoá giữa các isolate)',
+        error: e,
+        stack: st,
+      );
+      return null;
+    }
+
+    if (data == null) {
+      await AppLog.w(
+        source,
+        LogTags.fetch,
+        'không có dữ liệu (offline và chưa có cache) → bỏ chu kỳ',
+      );
+      return null;
+    }
+
+    // Các side-effect (sinh cảnh báo + lập lịch) bọc try RIÊNG để một lỗi ở đây
+    // KHÔNG làm mất `data` — foreground service cần `data` để cập nhật thông báo
+    // thường trực.
+    try {
       if (data.age.inMinutes <= AppConfig.alertMaxDataAgeMinutes) {
-        final rain = const AnalyzeRain().call(data);
-        final env = const DetectEnvChange().call(data);
-        final condition = WeatherCondition.classify(
-          data.current.conditionId,
-          rainMmH: data.current.rain1h,
-        );
-
-        final store = AlertStateStore();
-        final prev = await store.read();
-
-        final out = const BuildWeatherAlerts().call(
-          rain: rain,
-          condition: condition,
-          env: env,
-          previousPhase: prev.phase,
-          previousCategory: prev.category,
-          previousChangeAt: prev.changeAt,
-          previousNotifiedAt: prev.notifiedAt,
-          envAlreadyNotified: prev.envNotified,
-        );
-
-        final notif = NotificationService();
-        if (out.alerts.isNotEmpty) {
-          await notif.init();
-          for (final a in out.alerts) {
-            await notif.show(id: a.id, title: a.title, body: a.body);
-          }
-        }
-
-        await store.write(
-          phase: out.newPhase,
-          category: out.newCategory,
-          changeAt: out.newChangeAt,
-          notifiedAt: out.newNotifiedAt,
-          envNotified: out.envNotified,
+        await _maybeAlert(data, source);
+      } else {
+        await AppLog.w(
+          source,
+          LogTags.skip,
+          'KHÔNG sinh cảnh báo: dữ liệu quá cũ',
+          data: {
+            'tuổi': '${data.age.inMinutes}p',
+            'trần': '${AppConfig.alertMaxDataAgeMinutes}p',
+          },
         );
       }
+    } catch (e, st) {
+      await AppLog.e(source, LogTags.notify, 'lỗi khi sinh cảnh báo',
+          error: e, stack: st);
+    }
 
-      // Bản tin hằng ngày: đảm bảo alarm đã lập đúng mốc theo cài đặt hiện tại.
+    // Bản tin hằng ngày + poll tin: đảm bảo alarm khớp cài đặt (idempotent, có
+    // throttle bên trong nên gọi mỗi chu kỳ không gây ANR).
+    try {
       final dp = await NotificationPrefsStore().read();
-      await scheduleDigests(dp);
-
-      // Theo dõi thông báo (JLPT/MBA…): đảm bảo alarm poll đã lập (idempotent).
+      await scheduleDigests(dp, source: source);
+    } catch (e, st) {
+      await AppLog.e(source, LogTags.digest, 'lỗi lập lịch bản tin',
+          error: e, stack: st);
+    }
+    try {
       final ap = await AnnouncementPrefsStore().read();
-      await scheduleAnnouncementCheck(ap);
-    } catch (_) {
-      // Nuốt lỗi side-effect; `data` vẫn được trả về bên dưới.
+      await scheduleAnnouncementCheck(ap, source: source);
+    } catch (e, st) {
+      await AppLog.e(source, LogTags.announce, 'lỗi lập lịch poll tin',
+          error: e, stack: st);
     }
 
     return data;
   } finally {
-    await db.close();
+    api.close();
+    if (ownsDb) {
+      try {
+        await database.close();
+      } catch (e, st) {
+        await AppLog.e(source, LogTags.db, 'lỗi đóng DB', error: e, stack: st);
+      }
+    }
+  }
+}
+
+/// Phân tích mưa/môi trường rồi phát cảnh báo nếu cần, ghi log ĐẦY ĐỦ quyết định
+/// (phát cái gì, hoặc bỏ qua vì lý do gì).
+///
+/// Chuỗi đọc-tính-ghi `AlertStateStore` phải chạy trong cùng một cycle lock (do
+/// lớp trigger giữ) — nếu không, hai isolate cùng đọc trạng thái cũ rồi cùng
+/// phát một cảnh báo, người dùng nghe thông báo hai lần.
+Future<void> _maybeAlert(WeatherData data, String source) async {
+  final rain = const AnalyzeRain().call(data);
+  final env = const DetectEnvChange().call(data);
+  final condition = WeatherCondition.classify(
+    data.current.conditionId,
+    rainMmH: data.current.rain1h,
+  );
+
+  await AppLog.i(
+    source,
+    LogTags.analyze,
+    'phân tích xong',
+    data: {
+      'pha': rain.phase.name,
+      'tình hình': condition.label,
+      'nguồn': rain.fromMinutely ? 'nowcast 15p' : 'dự báo giờ',
+      if (rain.changeAt != null) 'mốc': _hhmm(rain.changeAt!),
+      if (rain.rainEndsAt != null) 'tạnh': _hhmm(rain.rainEndsAt!),
+      if (rain.probabilityPct != null) 'xác suất': '${rain.probabilityPct}%',
+      if (rain.segments.length >= 2) 'số đoạn mưa': rain.segments.length,
+      if (env.hasStrongChange)
+        'môi trường': 'Δt ${env.tempDeltaC.toStringAsFixed(1)}°C · '
+            'Δẩm ${env.humidityDeltaPct.toStringAsFixed(0)}%',
+    },
+  );
+
+  final store = AlertStateStore();
+  final prev = await store.read();
+
+  final out = const BuildWeatherAlerts().call(
+    rain: rain,
+    condition: condition,
+    env: env,
+    previousPhase: prev.phase,
+    previousCategory: prev.category,
+    previousChangeAt: prev.changeAt,
+    previousNotifiedAt: prev.notifiedAt,
+    envAlreadyNotified: prev.envNotified,
+  );
+
+  if (out.alerts.isEmpty) {
+    await AppLog.i(
+      source,
+      LogTags.skip,
+      'KHÔNG báo — chưa có gì đổi so với lần trước',
+      data: {
+        'pha trước': prev.phase?.name ?? 'chưa có',
+        'pha nay': out.newPhase.name,
+        if (prev.changeAt != null) 'mốc đã báo': _hhmm(prev.changeAt!),
+        if (prev.notifiedAt != null) 'báo lúc': _hhmm(prev.notifiedAt!),
+      },
+    );
+  } else {
+    final notif = NotificationService();
+    await notif.init();
+    for (final a in out.alerts) {
+      await notif.show(id: a.id, title: a.title, body: a.body);
+      await AppLog.i(
+        source,
+        LogTags.notify,
+        'ĐÃ BÁO: ${a.title}',
+        data: {'id': a.id, 'nội dung': a.body},
+      );
+    }
+  }
+
+  await store.write(
+    phase: out.newPhase,
+    category: out.newCategory,
+    changeAt: out.newChangeAt,
+    notifiedAt: out.newNotifiedAt,
+    envNotified: out.envNotified,
+  );
+}
+
+/// Dọn cache thời tiết cũ, tối đa 1 lần/ngày. Lỗi được ghi log và bỏ qua.
+Future<void> _purgeCacheIfDue(
+  WeatherLocalDataSource local,
+  String source,
+) async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    // `reload()` vì mỗi isolate giữ một bản cache riêng — không reload thì
+    // isolate sống lâu (foreground service) sẽ dọn lại mỗi chu kỳ.
+    await prefs.reload();
+    final lastMs = prefs.getInt(_kLastPurgeMsKey) ?? 0;
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    const dayMs = 24 * 60 * 60 * 1000;
+    if (lastMs != 0 && nowMs - lastMs < dayMs) return;
+
+    await local.purgeOlderThan(
+      const Duration(days: AppConfig.cacheMaxAgeDays),
+    );
+    await prefs.setInt(_kLastPurgeMsKey, nowMs);
+    await AppLog.i(source, LogTags.db, 'đã dọn cache thời tiết cũ (1 lần/ngày)');
+  } catch (e, st) {
+    await AppLog.w(
+      source,
+      LogTags.db,
+      'dọn cache thất bại (bỏ qua, không ảnh hưởng chu kỳ)',
+      data: {'err': e.toString()},
+    );
+    assert(() {
+      // ignore: avoid_print
+      print('purgeCache: $e\n$st');
+      return true;
+    }());
   }
 }
 
 /// Nội dung ngắn cho thông báo thường trực của foreground service, ví dụ
-/// "🌤️ 33°C · Trời nắng · UV 8 · cập nhật 14:35". Dùng `WeatherCondition` để
-/// lấy emoji; kèm giờ lấy dữ liệu (`fetchedAt`) để tiện theo dõi độ tươi —
-/// biết được thông báo phản ánh lần gọi API/cache lúc nào.
+/// "🌤️ 33°C · Trời nắng · UV 8 · cập nhật 14:35".
 String foregroundStatusText(WeatherData data) {
   final c = data.current;
   final condition = WeatherCondition.classify(c.conditionId, rainMmH: c.rain1h);

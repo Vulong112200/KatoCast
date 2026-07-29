@@ -11,7 +11,11 @@ import 'package:timezone/timezone.dart' as tz;
 
 import 'core/app_router.dart';
 import 'core/background/background_triggers.dart';
+import 'core/background/cycle_lock.dart';
 import 'core/background/weather_check.dart';
+import 'core/diagnostics/app_log.dart';
+import 'core/diagnostics/log_entry.dart';
+import 'core/diagnostics/log_tags.dart';
 import 'core/di/providers.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/theme_controller.dart';
@@ -19,6 +23,8 @@ import 'core/theme/theme_palettes.dart';
 import 'core/theme/weather_theme.dart';
 import 'features/alerts/data/digest_scheduler.dart';
 import 'features/alerts/data/notification_prefs_store.dart';
+import 'features/announcements/data/announcement_prefs_store.dart';
+import 'features/announcements/data/announcement_scheduler.dart';
 import 'features/location/presentation/providers/location_provider.dart';
 import 'features/notes/data/note_notification_service.dart';
 import 'features/notes/presentation/providers/notes_provider.dart';
@@ -84,6 +90,10 @@ class _KatoCastAppState extends ConsumerState<KatoCastApp> {
   }
 
   Future<void> _bootstrap() async {
+    // 0. Ghi dấu mở app vào nhật ký — mốc để đọc trang "Nhật ký hoạt động" biết
+    //    ranh giới giữa các phiên (và biết app có được mở lại giữa đường không).
+    unawaited(AppLog.i(LogSource.ui, LogTags.boot, 'mở app'));
+
     // 1. Khởi tạo channel thông báo + xin quyền (Android 13+). Từ chối → app
     //    vẫn chạy, chỉ không gửi alert.
     await ref.read(notificationServiceProvider).init();
@@ -94,10 +104,9 @@ class _KatoCastAppState extends ConsumerState<KatoCastApp> {
       await ref.read(permissionServiceProvider).requestExactAlarmPermission();
     } catch (_) {}
 
-    // 2. Đăng ký lớp chạy nền. `applyBackgroundTriggers` đảm bảo CHỈ MỘT cơ chế
-    //    drive `runWeatherCheck` tại một thời điểm (tránh 3 lớp cùng đánh thức
-    //    máy mỗi chu kỳ gây nóng): foreground service khi bật, hoặc alarm exact
-    //    + WorkManager khi tắt. Xem `background_triggers.dart`.
+    // 2. Đăng ký các lớp chạy nền. `CycleLock` đảm bảo chỉ MỘT chu kỳ thực sự
+    //    chạy tại một thời điểm, nên nhiều lớp cùng bật là nhiều đường hồi phục
+    //    độc lập chứ không phải nguồn tranh chấp. Xem `background_triggers.dart`.
     await applyBackgroundTriggers();
 
     // 2b. Xin bỏ giới hạn pin (whitelist) để nền chạy ổn định trên các máy diệt
@@ -112,6 +121,7 @@ class _KatoCastAppState extends ConsumerState<KatoCastApp> {
     //    chính (tránh ANR "App không hoạt động"); thứ tự với nhau không quan
     //    trọng vì mỗi hàm tự dựng dependency riêng.
     unawaited(_rescheduleDigests());
+    unawaited(_rescheduleAnnouncementCheck());
     unawaited(() async {
       try {
         await reassertNoteNotifications(
@@ -124,8 +134,13 @@ class _KatoCastAppState extends ConsumerState<KatoCastApp> {
     // 4b. Chạy kiểm tra thời tiết NGAY khi mở app (một lần) → khởi tạo trạng
     //     thái cảnh báo (AlertStateStore) + bắn cảnh báo tức thì nếu đang
     //     sắp/đổi mưa + làm tươi thông báo thường trực. Không await để không
-    //     chặn khởi động UI; bọc catch vì runWeatherCheck tự dựng/đóng DB.
-    runWeatherCheck().catchError((_) => null);
+    //     chặn khởi động UI. Qua cycle lock để không đua với tick nền.
+    unawaited(
+      CycleLock.runGuarded(
+        LogSource.ui,
+        () => runWeatherCheck(source: LogSource.ui),
+      ).catchError((_) => null),
+    );
 
     // 4c. Onboarding chống bị OEM giết (Nubia/MyOS…): lần đầu, nếu chưa bỏ giới
     //     hạn pin → hướng dẫn bật Tự khởi động + Không giới hạn pin.
@@ -220,9 +235,23 @@ class _KatoCastAppState extends ConsumerState<KatoCastApp> {
       // Chỉ cần lập lịch alarm đúng mốc giờ theo cài đặt; nội dung sẽ được
       // callback tự fetch tươi lúc bắn nên KHÔNG cần đợi weatherProvider ở đây.
       final prefs = await NotificationPrefsStore().read();
-      await scheduleDigests(prefs, force: true);
-    } catch (_) {
-      // Lỗi lập lịch (vd nền tảng không hỗ trợ AlarmManager) → bỏ qua.
+      await scheduleDigests(prefs, force: true, source: LogSource.ui);
+    } catch (e, st) {
+      await AppLog.e(LogSource.ui, LogTags.digest, 'lỗi lập lịch bản tin khi mở app',
+          error: e, stack: st);
+    }
+  }
+
+  /// Tự chữa lịch poll tin mới khi mở app (giống bản tin). Nếu chuỗi alarm bị đứt
+  /// trong đêm thì mở app là một trong các đường dựng lại.
+  Future<void> _rescheduleAnnouncementCheck() async {
+    try {
+      final prefs = await AnnouncementPrefsStore().read();
+      await scheduleAnnouncementCheck(prefs, force: true, source: LogSource.ui);
+    } catch (e, st) {
+      await AppLog.e(
+          LogSource.ui, LogTags.announce, 'lỗi lập lịch poll tin khi mở app',
+          error: e, stack: st);
     }
   }
 

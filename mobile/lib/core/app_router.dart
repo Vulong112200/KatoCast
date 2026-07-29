@@ -1,6 +1,7 @@
 import 'package:go_router/go_router.dart';
 
 import '../features/announcements/presentation/screens/announcements_screen.dart';
+import '../features/diagnostics/presentation/screens/diagnostics_screen.dart';
 import '../features/fixed_route/presentation/screens/route_screen.dart';
 import '../features/map_news/presentation/screens/map_screen.dart';
 import '../features/notes/presentation/screens/note_edit_screen.dart';
@@ -48,6 +49,11 @@ final appRouter = GoRouter(
       path: '/settings',
       name: 'settings',
       builder: (context, state) => const SettingsScreen(),
+    ),
+    GoRoute(
+      path: '/diagnostics',
+      name: 'diagnostics',
+      builder: (context, state) => const DiagnosticsScreen(),
     ),
   ],
 );

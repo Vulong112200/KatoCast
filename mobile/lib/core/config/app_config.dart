@@ -199,6 +199,20 @@ class AppConfig {
   /// Các chủ đề theo dõi được (khớp `topic` ở backend).
   static const List<String> announcementTopics = ['jlpt', 'mba'];
 
+  // --- Nhật ký hoạt động (diagnostics) ---
+
+  /// Số ngày giữ nhật ký. Dòng cũ hơn ngưỡng này bị bỏ khi đọc — đủ để soi
+  /// "tối qua → sáng nay" mà không góp thêm vào chuyện DB/bộ nhớ phình.
+  static const int logRetentionDays = 7;
+
+  /// Số dòng nhật ký tối đa trả về cho UI (mới nhất trước). Trần cứng để trang
+  /// Nhật ký không bao giờ phải dựng danh sách khổng lồ.
+  static const int logMaxEntries = 5000;
+
+  /// Trần kích thước MỖI file nhật ký (byte). Vượt ngưỡng → dồn sang file `.1`
+  /// (giữ đúng 2 file) nên tổng dung lượng luôn có trần ~2× giá trị này.
+  static const int logMaxBytesPerFile = 512 * 1024;
+
   // --- Định danh & endpoint dịch vụ ngoài ---
 
   /// User-Agent định danh app (chính sách OSM/Overpass yêu cầu UA rõ ràng;
