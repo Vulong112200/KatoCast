@@ -190,6 +190,12 @@ Future<void> _maybeAlert(WeatherData data, String source) async {
     rainMmH: data.current.rain1h,
   );
 
+  // Ghi cả SỐ LIỆU THÔ đã dùng để kết luận. Không có phần này thì không thể
+  // đối chiếu khi app nói "đang mưa" mà ngoài trời chỉ âm u — chính là ca người
+  // dùng phản ánh. Ngưỡng cũng in kèm để thấy ngay vì sao ra kết luận đó.
+  final nowcastNow = data.minutely.isNotEmpty
+      ? data.minutely.first.precipitationMmH
+      : null;
   await AppLog.i(
     source,
     LogTags.analyze,
@@ -198,6 +204,16 @@ Future<void> _maybeAlert(WeatherData data, String source) async {
       'pha': rain.phase.name,
       'tình hình': condition.label,
       'nguồn': rain.fromMinutely ? 'nowcast 15p' : 'dự báo giờ',
+      // --- số liệu thô ---
+      'nowcast bây giờ': nowcastNow == null
+          ? 'không có'
+          : '${nowcastNow.toStringAsFixed(2)} mm/h',
+      'ngưỡng ĐANG mưa': '${AppConfig.rainNowThresholdMmH} mm/h '
+          '× ${AppConfig.rainNowSustainedSlots} mốc',
+      'mưa 1h quan trắc': '${data.current.rain1h.toStringAsFixed(2)} mm',
+      'mã điều kiện OWM': data.current.conditionId ?? 'không có',
+      'tuổi dữ liệu': '${data.age.inMinutes}p',
+      // --- kết luận ---
       if (rain.changeAt != null) 'mốc': _hhmm(rain.changeAt!),
       if (rain.rainEndsAt != null) 'tạnh': _hhmm(rain.rainEndsAt!),
       if (rain.probabilityPct != null) 'xác suất': '${rain.probabilityPct}%',
@@ -210,6 +226,15 @@ Future<void> _maybeAlert(WeatherData data, String source) async {
 
   final store = AlertStateStore();
   final prev = await store.read();
+  if (prev.expired) {
+    await AppLog.w(
+      source,
+      LogTags.skip,
+      'trạng thái cảnh báo lần trước ĐÃ QUÁ CŨ → coi như khởi đầu mới '
+      '(app vừa bị ngắt một khoảng dài)',
+      data: {'tuổi': '${prev.age!.inMinutes}p', 'trần': '${AlertStateStore.maxAge.inMinutes}p'},
+    );
+  }
 
   final out = const BuildWeatherAlerts().call(
     rain: rain,

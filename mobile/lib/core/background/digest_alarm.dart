@@ -6,6 +6,7 @@ import '../../features/alerts/domain/usecases/build_daily_digest.dart';
 import '../../features/weather/data/datasources/weather_local_datasource.dart';
 import '../../features/weather/data/datasources/weather_remote_datasource.dart';
 import '../../features/weather/data/repositories/weather_repository_impl.dart';
+import '../config/app_config.dart';
 import '../database/app_database.dart';
 import '../diagnostics/app_log.dart';
 import '../diagnostics/log_entry.dart';
@@ -63,22 +64,30 @@ Future<void> _runDigest(int id) async {
   const src = LogSource.digest;
   await AppLog.i(src, LogTags.cycle, 'alarm bản tin nổ', data: {'id': id});
 
-  DigestPrefs? prefs;
+  final prefs = await _readPrefsSafely(src);
+
+  // RE-ARM TRƯỚC, LÀM VIỆC SAU.
+  //
+  // Trước đây re-arm nằm ở `finally` cuối hàm. Nhưng isolate nền có thể bị OEM
+  // giết BẤT KỲ LÚC NÀO giữa chu kỳ (đã quan sát: alarm nổ 06:34:03 rồi tiến
+  // trình chết, không kịp re-arm → chuỗi đứt 7h18). Đặt lại lịch ngay từ đầu
+  // biến chuỗi thành tự duy trì: dù phần dưới có chết thì mốc ngày mai đã nằm
+  // trong AlarmManager của hệ thống.
+  await _rearmTomorrow(id, prefs, src);
+
+  if (prefs == null || !prefs.enabled) {
+    await AppLog.i(src, LogTags.digest, 'bản tin đang TẮT → bỏ mốc này');
+    return;
+  }
+
   try {
-    // Tôn trọng cài đặt: người dùng đã tắt bản tin thì không hiển thị (và không
-    // re-arm — xử lý ở finally theo prefs.enabled).
-    prefs = await NotificationPrefsStore().read();
-    if (!prefs.enabled) {
-      await AppLog.i(src, LogTags.digest, 'bản tin đang TẮT → bỏ mốc này');
-      return;
-    }
-
     final coords = await resolveBackgroundCoords(source: src);
-    if (coords == null) return; // vẫn re-arm ở finally cho ngày mai.
+    if (coords == null) return; // đã re-arm ở trên.
 
-    // Cycle lock: bản tin fetch dữ liệu tươi nên cũng phải xếp hàng với chu kỳ
-    // nền, không thì hai isolate cùng mở DB (`database is locked`).
-    await CycleLock.runGuarded(src, () async {
+    // Bản tin CHỜ lock chứ KHÔNG bỏ lượt: đây là thông báo mỗi ngày một lần mà
+    // người dùng đang đợi. Bug thật đã quan sát: bản tin nổ đúng lúc WorkManager
+    // giữ lock → bị bỏ lượt → mất hẳn bản tin của ngày đó.
+    await CycleLock.runWaiting(src, () async {
       final db = AppDatabase();
       final api = ApiClient.create();
       try {
@@ -120,35 +129,57 @@ Future<void> _runDigest(int id) async {
     await AppLog.e(src, LogTags.digest, 'lỗi khi dựng bản tin',
         error: e, stack: st);
   } finally {
-    // Đặt lại alarm cho ngày mai (one-shot không tự lặp). Chỉ khi bản tin còn bật
-    // VÀ mốc (index) này vẫn tồn tại trong danh sách. Bọc try riêng để lỗi hiển
-    // thị không chặn việc re-arm.
-    try {
-      final p = prefs ?? await NotificationPrefsStore().read();
-      final index = id - NotificationIds.digestBase;
-      if (p.enabled && index >= 0 && index < p.times.length) {
-        await scheduleDigestSlot(id, p.times[index], source: src);
-      } else {
-        await AppLog.i(
-          src,
-          LogTags.digest,
-          'KHÔNG re-arm mốc này',
-          data: {
-            'id': id,
-            'lý do': p.enabled ? 'mốc đã bị xoá khỏi cài đặt' : 'bản tin đã tắt',
-          },
-        );
-      }
-    } catch (e, st) {
-      await AppLog.e(
+    await AppLog.flush();
+  }
+}
+
+/// Đọc cài đặt bản tin, trả null nếu lỗi (để vẫn re-arm được theo đường dự phòng).
+Future<DigestPrefs?> _readPrefsSafely(String src) async {
+  try {
+    return await NotificationPrefsStore().read();
+  } catch (e, st) {
+    await AppLog.e(src, LogTags.digest, 'không đọc được cài đặt bản tin',
+        error: e, stack: st);
+    return null;
+  }
+}
+
+/// Đặt lại alarm cho NGÀY MAI (one-shot không tự lặp). Chỉ khi bản tin còn bật
+/// VÀ mốc (index) này vẫn tồn tại trong danh sách.
+Future<void> _rearmTomorrow(int id, DigestPrefs? prefs, String src) async {
+  try {
+    final index = id - NotificationIds.digestBase;
+    if (prefs == null) {
+      // Không đọc được cài đặt → vẫn giữ chuỗi sống bằng mốc mặc định thay vì
+      // để nó đứt hẳn (thà bản tin lệch giờ còn hơn im lặng mãi).
+      await scheduleDigestSlot(id, AppConfig.digestDefaultMorningMinutes,
+          source: src);
+      await AppLog.w(src, LogTags.arm,
+          're-arm bằng mốc mặc định vì không đọc được cài đặt', data: {'id': id});
+      return;
+    }
+    if (prefs.enabled && index >= 0 && index < prefs.times.length) {
+      await scheduleDigestSlot(id, prefs.times[index], source: src);
+    } else {
+      await AppLog.i(
         src,
-        LogTags.arm,
-        'RE-ARM bản tin THẤT BẠI — mốc này có thể mất tới khi mở lại app',
-        error: e,
-        stack: st,
-        data: {'id': id},
+        LogTags.digest,
+        'KHÔNG re-arm mốc này',
+        data: {
+          'id': id,
+          'lý do':
+              prefs.enabled ? 'mốc đã bị xoá khỏi cài đặt' : 'bản tin đã tắt',
+        },
       );
     }
-    await AppLog.flush();
+  } catch (e, st) {
+    await AppLog.e(
+      src,
+      LogTags.arm,
+      'RE-ARM bản tin THẤT BẠI — mốc này có thể mất tới khi mở lại app',
+      error: e,
+      stack: st,
+      data: {'id': id},
+    );
   }
 }

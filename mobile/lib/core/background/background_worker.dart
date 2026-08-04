@@ -1,3 +1,4 @@
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:workmanager/workmanager.dart';
 
 import '../../features/notes/data/note_notification_service.dart';
@@ -8,6 +9,7 @@ import '../diagnostics/log_tags.dart';
 import '../notifications/notification_service.dart';
 import 'background_prefs.dart';
 import 'cycle_lock.dart';
+import 'service_health.dart';
 import 'weather_alarm.dart';
 import 'weather_check.dart';
 
@@ -31,7 +33,14 @@ class BackgroundScheduler {
       kWeatherCheckTask,
       kWeatherCheckTask,
       frequency: Duration(minutes: freq),
-      constraints: Constraints(networkType: NetworkType.connected),
+      // ⚠️ KHÔNG đặt `networkType: connected`. Lượt WorkManager không chỉ lấy
+      // thời tiết — nó còn là WATCHDOG duy nhất dựng lại chuỗi alarm one-shot
+      // khi chuỗi đó đứt (xem cuối [callbackDispatcher]) và là nơi phát hiện
+      // foreground service đã bị hệ thống giết. Với ràng buộc mạng, đúng lúc
+      // máy mất mạng (chế độ máy bay, vùng lõm, đêm bật tiết kiệm dữ liệu) là
+      // lúc watchdog KHÔNG chạy — và nếu chuỗi alarm đứt trong khoảng đó thì
+      // không còn lớp nào dựng lại. Không có mạng thì `runWeatherCheck` tự dùng
+      // cache và thoát êm, rẻ hơn nhiều so với việc mất lưới an toàn.
       // `update`: áp cấu hình mới lên task đã đăng ký từ lần cài trước.
       existingWorkPolicy: ExistingPeriodicWorkPolicy.update,
     );
@@ -108,6 +117,23 @@ void callbackDispatcher() {
         }
       } catch (e, st) {
         await AppLog.e(src, LogTags.arm, 'không dựng lại được chuỗi alarm',
+            error: e, stack: st);
+      }
+
+      // Ghi nhận foreground service còn sống không (KHÔNG start lại — Android
+      // 12+ chặn, và plugin sập tiến trình nếu thử; xem `service_health.dart`).
+      // WorkManager là lớp bền nhất nên đây là nơi đáng tin nhất để phát hiện
+      // app đã mất chế độ theo dõi liên tục và nhắc người dùng mở app.
+      try {
+        if (await BackgroundPrefsStore().foregroundEnabled()) {
+          await ForegroundServiceHealth.reportFromBackground(
+            src,
+            running: await FlutterForegroundTask.isRunningService,
+          );
+        }
+      } catch (e, st) {
+        await AppLog.e(src, LogTags.service,
+            'không đọc được tình trạng foreground service',
             error: e, stack: st);
       }
     } catch (e, st) {

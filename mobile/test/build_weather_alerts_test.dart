@@ -328,4 +328,75 @@ void main() {
     );
     expect(second.alerts, isEmpty);
   });
+
+  group('KHỞI ĐẦU MỚI (previousCategory == null) không spam tình hình vô hại', () {
+    test('trời nhiều mây ⇒ KHÔNG báo gì', () {
+      // Ca thật trong nhật ký: mỗi lần app hồi sinh sau một khoảng đứt dài,
+      // `AlertStateStore` hết hạn → previousCategory null → bản cũ luôn phát
+      // "🌤️ Nhiều mây — Trời nhiều mây." (02/08 06:50, 04/08 12:33). Đó là
+      // phần lớn số thông báo trong ngày mà không nói được điều gì hữu ích.
+      final r = sut.call(
+        rain: const RainStatus.dry(),
+        condition: WeatherCondition.classify(803), // nhiều mây
+        env: EnvChange.none,
+        now: _now,
+      );
+      expect(r.alerts, isEmpty);
+      // Vẫn PHẢI chốt trạng thái để lần sau so sánh được.
+      expect(r.newCategory, WeatherCategory.cloudy);
+    });
+
+    test('trời u ám ⇒ KHÔNG báo gì', () {
+      final r = sut.call(
+        rain: const RainStatus.dry(),
+        condition: WeatherCondition.classify(804),
+        env: EnvChange.none,
+        now: _now,
+      );
+      expect(r.alerts, isEmpty);
+    });
+
+    test('trời nắng ⇒ KHÔNG báo gì', () {
+      final r = sut.call(
+        rain: const RainStatus.dry(),
+        condition: WeatherCondition.classify(800),
+        env: EnvChange.none,
+        now: _now,
+      );
+      expect(r.alerts, isEmpty);
+    });
+
+    test('MƯA NHỎ ⇒ VẪN báo (đây là thứ người dùng cần biết ngay)', () {
+      final r = sut.call(
+        rain: const RainStatus.dry(),
+        condition: WeatherCondition.classify(500),
+        env: EnvChange.none,
+        now: _now,
+      );
+      expect(r.alerts.single.title, contains('Mưa nhỏ'));
+    });
+
+    test('DÔNG ⇒ VẪN báo', () {
+      final r = sut.call(
+        rain: const RainStatus.dry(),
+        condition: WeatherCondition.classify(202),
+        env: EnvChange.none,
+        now: _now,
+      );
+      expect(r.alerts, isNotEmpty);
+    });
+
+    test('nhiều mây → u ám khi ĐÃ có trạng thái trước ⇒ vẫn báo như cũ', () {
+      // Van chỉ áp cho lần khởi đầu; luồng bình thường không đổi hành vi.
+      final r = sut.call(
+        rain: const RainStatus.dry(),
+        condition: WeatherCondition.classify(804),
+        env: EnvChange.none,
+        previousPhase: RainPhase.dry,
+        previousCategory: WeatherCategory.cloudy,
+        now: _now,
+      );
+      expect(r.alerts.single.title, contains('u ám'));
+    });
+  });
 }

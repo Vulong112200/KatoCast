@@ -31,6 +31,15 @@ class LogTags {
   /// Đã đặt/đặt lại một alarm (kèm mốc kế tiếp).
   static const String arm = 'arm';
 
+  /// Khoá `data` phân biệt LOẠI alarm trong một dòng [arm] — vì cả alarm thời
+  /// tiết, bản tin và poll tin đều dùng tag `arm`.
+  static const String armKindKey = 'loại';
+
+  /// Giá trị [armKindKey] của alarm THỜI TIẾT (`kWeatherAlarmKind`). Đặt ở đây,
+  /// không ở `weather_alarm.dart`, để `LogHealth` lọc được mà tầng diagnostics
+  /// không phải phụ thuộc ngược vào tầng background.
+  static const String armKindWeather = 'thời tiết';
+
   /// Lock chu kỳ: bị bỏ lượt, hoặc chiếm lại lock quá hạn.
   static const String lock = 'lock';
 

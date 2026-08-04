@@ -98,6 +98,8 @@ MapScreen → flutter_map (tile OSM + lớp mưa OWM) center theo currentLocatio
 ### 2. Thông báo thông minh (background → LÕI runWeatherCheck)
 ```
 applyBackgroundTriggers() [main._bootstrap + backgroundSettingsProvider khi đổi cài đặt]:
+   ⚠️ CHỈ chạy ở isolate UI. start FGS từ isolate NỀN là bất hợp pháp trên Android 12+ và
+     làm SẬP TIẾN TRÌNH (plugin gọi startForeground không có try/catch) → xem "3 ĐƯỜNG BẬT LẠI".
    ▼ đọc BackgroundPrefsStore (foregroundEnabled + intervalMinutes)
    ├─ foregroundEnabled? → startWeatherForegroundService : stopWeatherForegroundService
    ├─ BackgroundScheduler.initialize   ← WorkManager LUÔN bật (lịch do JobScheduler HĐH giữ)
@@ -111,26 +113,59 @@ BA LỚP đều gọi runWeatherCheck (isolate riêng tự dựng DI), MỖI L�
    ▼ AppLog.i(src, cycle) → isWithinActiveHours?
    ├─ NGOÀI khung → không mở DB, không lấy dữ liệu
    │     • foreground_service: VẪN updateService "đang nghỉ (05:00–21:00)" (không đóng băng text cũ)
-   │     • weather_alarm: chặng đêm — hồi sinh FG nếu chết + tự chữa lịch bản tin
+   │     • weather_alarm: chặng đêm — GHI NHẬN tình trạng FG + tự chữa lịch bản tin
    └─ TRONG khung → CycleLock.runGuarded(src, ...):     ← CHỐNG CHẠY CHỒNG (lock bằng FILE)
          không lấy được lock → AppLog "bỏ lượt: chu kỳ đang chạy bởi <chủ>", VẪN re-arm alarm
+         (lock ghi TOKEN mỗi lượt chiếm; release() chỉ xoá lock của CHÍNH MÌNH — chu kỳ treo bị
+          chiếm lại, tỉnh lại rồi release sẽ KHÔNG xoá lock của chủ mới)
          lấy được → MỘT AppDatabase cho cả chu kỳ:
             reassertNoteNotifications(db)  →  runWeatherCheck(source, db)  →  db.close()
   • foreground_service: onRepeatEvent mỗi intervalMinutes (5/10/15/30'), allowWakeLock,
       allowWifiLock=false
   • weather_alarm (id 2001): oneShotAt exact+allowWhileIdle, LUÔN tự re-arm dù phần trên lỗi;
-      ghi mốc kế tiếp vào kWeatherAlarmNextMsKey; hồi sinh FG chỉ khi isRunningService==false
-      (KHÔNG restartService — nó reset pha FG về pha alarm, chính là nguồn dính pha)
+      ghi mốc kế tiếp vào kWeatherAlarmNextMsKey (dòng log mang nhãn `loại: thời tiết` để LogHealth
+      nhận đúng mốc bất kể lớp nào đặt); _reportForegroundServiceState CHỈ GHI NHẬN, KHÔNG start FGS
       ▼ re-arm: TRONG khung → now+interval (hoặc +5' nếu fromCacheFallback);
                 NGOÀI khung → sớm hơn trong (now+kNightHopInterval 2h, nextActiveWindowStart)
                 ← chặng đêm: mất một chặng chỉ mất 2h, thay vì cả đêm treo trên 1 alarm
-  • WorkManager periodic (clamp ≥15', LUÔN bật): WATCHDOG — weatherAlarmChainStatus().overdue
-      (mốc đã đặt trôi qua >5') → scheduleWeatherAlarm dựng lại chuỗi đã đứt
+  • WorkManager periodic (clamp ≥15', LUÔN bật, KHÔNG ràng buộc mạng): WATCHDOG —
+      weatherAlarmChainStatus().overdue (mốc đã đặt trôi qua >5') → scheduleWeatherAlarm dựng lại
+      chuỗi đã đứt + báo cáo tình trạng FG service.  ← bỏ NetworkType.connected vì mất mạng
+      đúng là lúc watchdog cần chạy nhất
+  • foreground_service tick: LƯỚI THỨ HAI cho chuỗi alarm — cũng dựng lại khi overdue
+   ▼ 🔴 VÒNG ĐỜI FOREGROUND SERVICE (nguyên nhân gốc của "app đứng im 46 tiếng"):
+   ▼   Android 15+ cắt FGS kiểu dataSync sau 6h tích lũy/24h (targetSdk 36) → onTimeout() mà plugin
+   ▼   KHÔNG cài → HĐH dừng service. ⇒ FIX: foregroundServiceType = "location" (không bị giới hạn
+   ▼   thời lượng, và đúng bản chất vì mỗi chu kỳ đều phân giải vị trí) + quyền
+   ▼   FOREGROUND_SERVICE_LOCATION; startWeatherForegroundService KIỂM TRA quyền vị trí TRƯỚC khi
+   ▼   start (thiếu → startForeground ném SecurityException = sập app) và ĐỌC ServiceRequestFailure.
+   ▼   Khi service đã chết, isolate nền TUYỆT ĐỐI KHÔNG được start lại: nhật ký 02/08 ghi
+   ▼   "thử hồi sinh" ở 12:58/13:13/13:28/13:43/14:13/14:28 rồi IM LẶNG TUYỆT ĐỐI mỗi lần
+   ▼   (ForegroundServiceStartNotAllowedException ở tầng Java giết tiến trình, Dart catch không bắt
+   ▼   được) → sau ~6 lần sập, HĐH force-stop app → hủy sạch alarm + job → im 46 TIẾNG.
+   ▼   3 ĐƯỜNG BẬT LẠI HỢP PHÁP: (a) main.onResume → _reviveForegroundServiceOnResume (app đang
+   ▼   hiển thị); (b) RestartReceiver của plugin (setAlarmClock — được HĐH miễn trừ, cần
+   ▼   stopWithTask=false); (c) nút "Bật lại theo dõi liên tục" trên trang /diagnostics.
+   ▼   Trong lúc chờ: ForegroundServiceHealth.markDead/deadFor + nếu im >2h trong khung giờ thì
+   ▼   MỘT thông báo nhắc mở app (channel service_health, cooldown 6h). Alarm + WorkManager vẫn
+   ▼   cập nhật đầy đủ, chỉ trễ hơn.
    ▼ ⚠️ Vuốt tắt app trên OEM (Nubia/MyOS…) = force-stop → hủy sạch alarm+FG; chắc chắn nhất là
    ▼    KHÓA app trong recents 🔒 (hoặc đừng vuốt tắt) + bật Tự khởi động + Không giới hạn pin.
    ▼    FG service khai báo stopWithTask=false (chỉ cứu ca task-removal, không cứu force-stop)
+   ▼ ⚠️ weather_alarm RE-ARM NGAY Ở ĐẦU callback, TRƯỚC mọi việc khác — nhật ký thật cho thấy
+   ▼   "06:34:03 alarm nổ" rồi tiến trình chết ngay, không kịp re-arm → chuỗi đứt 7h18.
+   ▼   Arm trước = chuỗi tự duy trì; chỉ ghi đè mốc ở cuối khi fetch fail (retrySoon → 5').
 runWeatherCheck(source, db) (core/background/weather_check.dart):
-   resolveBackgroundCoords(source) → AppLog toạ độ + NGUỒN (lastKnown/store) + tuổi; null → dừng
+   resolveBackgroundCoords(source) — 3 bước, KHÔNG chỉ đọc toạ độ cũ:
+      (1) getLastKnownPosition còn tươi? → dùng
+      (2) toạ độ đang có cũ hơn 25' → CHỦ ĐỘNG getCurrentPosition (accuracy low, timeLimit 25s)
+          ← bước MỚI: trên máy thật (1) hầu như luôn null, nên trước đây nền mãi dùng toạ độ
+            từ lần MỞ APP gần nhất → di chuyển mà vẫn báo thời tiết chỗ cũ
+      (3) LastLocationStore (có savedAt) làm lưới cuối
+   ▼ AppLog: nguồn · toạ độ · tuổi · khoá cache · ĐỊA CHỈ ĐẦY ĐỦ (số nhà→đường→phường→quận→
+   ▼   tỉnh, PlaceLabelResolver: Nominatim + cache 150m/12h + giãn cách 1'/req + fallback
+   ▼   plugin geocoding) · KHOẢNG ĐÃ DỊCH CHUYỂN
+   ▼ (thiếu quyền "Luôn cho phép" → log warn nói rõ, vì (2) sẽ luôn thất bại); null → dừng
    ▼  purge cache cũ: CHỈ 1 LẦN/NGÀY, trong try (trước đây mỗi chu kỳ & NGOÀI try nên một lỗi
    │  `database is locked` ở đây làm sập cả chu kỳ, bị catch(_) nuốt → mất dữ liệu + thông báo)
    ▼  GUARD QUOTA bám chu kỳ: getCachedWeather → cache tươi hơn (intervalMinutes−1') → DÙNG CACHE,
@@ -141,15 +176,33 @@ AnalyzeRain(now) [KẾT HỢP 3 NGUỒN: quan trắc current ĐÈ nowcast khi tr
    │ → changeAt + rainEndsAt/duration (nối tiếp hourly khi vượt cửa sổ nowcast) + segments (đoạn cường độ)
    │ + probabilityPct] + DetectEnvChange
    ▼
-   ▼ AppLog.i(analyze): pha + tình hình + nguồn (nowcast/hourly) + mốc + giờ tạnh + xác suất
+   │ ⚠️ TUYÊN BỐ "đang mưa" có tiêu chí RIÊNG, chặt hơn tiêu chí "sắp mưa":
+   │   _nowcastSaysRainingNow = mốc đầu ≥2.0 mm/h, HOẶC ≥0.5 mm/h DUY TRÌ 2 mốc liên tiếp.
+   │   Trước đây chỉ cần >0.1 mm/h ở MỘT mốc → mưa vết lúc trời âm u bật pha raining, rồi vì
+   │   cảnh báo chỉ phát khi pha ĐỔI nên app kẹt "đang mưa" >15h: vừa báo sai, vừa im lặng,
+   │   vừa KHÔNG BAO GIỜ tới được rainStartingSoon (mất hẳn cảnh báo "sắp mưa").
+   │   _obsIndicatesRain: mã YẾU (500 light rain, 3xx drizzle) cần rain1h>0; mã MẠNH (2xx, 501+) tin ngay.
+   │   ⚠️ rain1h là số TÍCH LŨY 1 GIỜ nên còn dư ~1h SAU KHI mưa tạnh (OWM vẫn giữ mã 500):
+   │   nhật ký 01/08 `nowcast 0.00 · rain1h 0.74 · mã 500` → app báo "đang mưa 80%" lúc trời đã
+   │   tạnh, rồi KẸT pha raining = im lặng. ⇒ nowcastSawNoRainAtAll (nowcast có dữ liệu và kết
+   │   luận dry cả cửa sổ) thì NOWCAST THẮNG. Van HẸP: KHÔNG chặn mã mạnh, KHÔNG chặn
+   │   rain1h ≥ 2.0mm, KHÔNG chặn khi nowcast thấy mưa sắp tới (nowcast chỉ TRỄ, không phủ định).
+   ▼ AppLog.i(analyze): pha + tình hình + nguồn + SỐ LIỆU THÔ (nowcast bây giờ, ngưỡng đang áp,
+   │ mưa 1h quan trắc, mã OWM, tuổi dữ liệu) + mốc + giờ tạnh + xác suất
 AlertStateStore.read()  ← LUÔN prefs.reload() (SharedPreferences cache RIÊNG từng isolate; isolate
    │ FG sống hàng giờ nên không reload thì không bao giờ thấy trạng thái isolate alarm ghi → báo lặp)
+   ▼ HẾT HẠN sau AlertStateStore.maxAge=2h → trả về như CHƯA CÓ GÌ (khởi đầu mới) + log warn.
+   │ Chống-spam giả định các chu kỳ nối tiếp vài phút; app bị giết hàng giờ thì giả định sụp —
+   │ nhật ký thật: 12:24 hôm sau vẫn so với trạng thái ghi từ 20:57 hôm trước.
    ▼ cả chuỗi read → show → write nằm TRONG CycleLock (không thì 2 isolate cùng đọc state cũ,
    │ cùng show → 1 thẻ nhưng 2 lần heads-up + 2 lần âm thanh)
 BuildWeatherAlerts(rain, env, previousPhase + previousChangeAt + previousNotifiedAt từ AlertStateStore)
    │ chỉ sinh alert khi PHA đổi; NGOẠI LỆ khi pha giữ nguyên:
    │  (a) changeAt lệch so lần ĐÃ BÁO: SỚM ≥15' / MUỘN ≥45' (bất đối xứng) → "Cập nhật:" (cùng ID)
    │  (b) đã báo từ XA (>35'), onset áp sát còn ≤35' → nhắc "Sắp mưa: còn ~N phút" (một lần)
+   │ KHỞI ĐẦU MỚI (previousCategory == null vì state hết hạn / lần chạy đầu): chỉ báo TÌNH HÌNH khi
+   │ WeatherSeverity ≥ notice (mưa/dông/sương mù). Trước đây luôn báo → mỗi lần app hồi sinh sau
+   │ khoảng đứt lại phát "🌤️ Nhiều mây" vô ích (chiếm phần lớn thông báo trong ngày).
    │ nội dung mưa: giờ bắt đầu (HH:MM từ changeAt) + % + giờ tạnh/thời lượng (rainEndsAt)
    │  + "Diễn biến: mưa vừa ~17:00–19:00, sau đó mưa nhỏ..." (describeRainCourse khi ≥2 đoạn)
    ▼
@@ -203,7 +256,12 @@ scheduleDigests(prefs) được gọi để lịch khớp cài đặt (không c�
    ▼                                                            gần đúng — không SecurityException im lặng)
 Đến mốc giờ → AlarmManager đánh thức isolate → digestAlarmCallback(id):
    ├─ id == digestTest(1099) → _runDigestTest: chỉ show thông báo xác nhận, KHÔNG fetch/re-arm
-   └─ id >= digestBase → index = id − digestBase → resolveBackgroundCoords → getWeather → BuildDailyDigest
+   └─ id >= digestBase → ⚠️ RE-ARM NGÀY MAI NGAY (_rearmTomorrow) TRƯỚC khi làm gì khác
+        (isolate có thể bị giết giữa chu kỳ; không đọc được prefs thì re-arm bằng mốc mặc định
+         — thà bản tin lệch giờ hơn là chuỗi im lặng mãi)
+        → index = id − digestBase → resolveBackgroundCoords → **CycleLock.runWaiting** (CHỜ lock
+          rồi chạy bất chấp — runGuarded từng BỎ RƠI bản tin: nổ đúng lúc WorkManager giữ lock →
+          bỏ lượt → tự hẹn lại NGÀY MAI = mất hẳn bản tin của ngày đó) → getWeather → BuildDailyDigest
         (BuildRainOutlook mưa theo buổi + UvAdvice lời khuyên UV theo mức)
         → NotificationService.show(id)   ← DỮ LIỆU TƯƠI
         → RE-ARM: scheduleDigestSlot(id, times[index]) cho NGÀY MAI (vẫn re-arm khi thiếu vị trí/offline;
@@ -230,7 +288,9 @@ TỰ CHẨN ĐOÁN: DigestSettingsCard "Đặt bản tin thử sau 1 phút" → 
    │   ⚠️ trước đây thiếu CẢ HAI guard này dù bị gọi mỗi chu kỳ → cancel đua với re-arm từ isolate alarm
    ▼ oneShotAt(announcementAlarm=1200) exact+allowWhileIdle (KHÔNG periodic)
 Đến mốc giờ → AlarmManager đánh thức isolate → announcementCheckCallback(id)
-   → CycleLock.runGuarded(announce, _fetchAndNotify):   ← lượt poll cũng ghi Drift nên phải xếp hàng
+   → ⚠️ RE-ARM NGÀY MAI NGAY, TRƯỚC khi làm gì khác (isolate có thể bị giết giữa chu kỳ)
+   → CycleLock.runWaiting(announce, _fetchAndNotify):  ← CHỜ lock rồi chạy bất chấp; mỗi ngày chỉ
+        có MỘT lượt poll nên bỏ lượt là mất tin cả ngày (runGuarded từng bỏ vì WorkManager giữ lock)
    AnnouncementRepository.fetchNewUnseen(topics): fetch backend → lọc bỏ contentHash có trong Drift seen_announcements
    → markSeen(fresh) TRƯỚC (một lượt ghi cho cả lô)
         ⚠️ THỨ TỰ QUAN TRỌNG: trước đây show TRƯỚC rồi mới markSeen — lượt ghi thất bại (DB bị isolate

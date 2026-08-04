@@ -36,6 +36,18 @@ class CycleLock {
 
   static String? _path;
 
+  /// Token của lượt chiếm HIỆN TẠI của isolate này (null = không giữ lock).
+  ///
+  /// ⚠️ Vì sao cần token: [release] cũ xoá file lock VÔ ĐIỀU KIỆN. Kịch bản sai:
+  /// chu kỳ A bị treo quá [staleAfter] → B chiếm lại lock (đúng) → A tỉnh lại,
+  /// chạy `finally { release() }` và **xoá lock của B** → một chu kỳ thứ ba chen
+  /// vào giữa lúc B đang mở DB. Đó chính là loại tranh chấp mà lock này tồn tại
+  /// để ngăn. Nay chỉ chủ THẬT SỰ của lock mới xoá được.
+  static String? _heldToken;
+
+  /// Bộ đếm để token không trùng khi hai lượt chiếm rơi vào cùng micro-giây.
+  static int _tokenSeq = 0;
+
   /// Thử chiếm lock cho [owner] (dùng [LogSource] làm tên chủ).
   ///
   /// Trả `true` nếu chiếm được — người gọi PHẢI gọi [release] trong `finally`.
@@ -44,7 +56,9 @@ class CycleLock {
   ///
   /// Không bao giờ ném lỗi: nếu tầng file lỗi thì trả `true` (thà chạy chồng như
   /// hiện trạng còn hơn ngừng cập nhật hoàn toàn).
-  static Future<bool> tryAcquire(String owner) async {
+  /// [quiet] = true khi đang thăm dò trong vòng chờ của [runWaiting] — không ghi
+  /// log mỗi nhịp, tránh làm ngập nhật ký bằng hàng chục dòng "bỏ lượt".
+  static Future<bool> tryAcquire(String owner, {bool quiet = false}) async {
     try {
       final path = await _resolvePath();
       if (path == null) return true;
@@ -55,12 +69,14 @@ class CycleLock {
         if (held != null) {
           final age = DateTime.now().difference(held.at);
           if (age <= staleAfter) {
-            await AppLog.i(
-              owner,
-              LogTags.lock,
-              'bỏ lượt: chu kỳ đang chạy',
-              data: {'chủ': held.owner, 'đã': '${age.inSeconds}s'},
-            );
+            if (!quiet) {
+              await AppLog.i(
+                owner,
+                LogTags.lock,
+                'bỏ lượt: chu kỳ đang chạy',
+                data: {'chủ': held.owner, 'đã': '${age.inSeconds}s'},
+              );
+            }
             return false;
           }
           await AppLog.w(
@@ -72,10 +88,13 @@ class CycleLock {
         }
       }
 
+      final token = '$owner-${DateTime.now().microsecondsSinceEpoch}-'
+          '${_tokenSeq++}';
       await file.writeAsString(
-        '$owner|${DateTime.now().millisecondsSinceEpoch}',
+        '$owner|${DateTime.now().millisecondsSinceEpoch}|$token',
         flush: true,
       );
+      _heldToken = token;
       return true;
     } catch (e, st) {
       await AppLog.e(
@@ -89,19 +108,50 @@ class CycleLock {
     }
   }
 
-  /// Nhả lock. An toàn khi gọi nhiều lần / khi chưa từng chiếm được.
+  /// Nhả lock — CHỈ khi lock trên đĩa vẫn là lượt chiếm của isolate này.
+  ///
+  /// An toàn khi gọi nhiều lần / khi chưa từng chiếm được. Nếu lock đã bị lớp
+  /// khác chiếm lại (chu kỳ này chạy quá [staleAfter]) thì KHÔNG xoá — xem
+  /// [_heldToken].
   static Future<void> release() async {
     try {
       final path = await _resolvePath();
       if (path == null) return;
       final file = File(path);
-      if (await file.exists()) await file.delete();
+      if (!await file.exists()) {
+        _heldToken = null;
+        return;
+      }
+      final held = await _readHolder(file);
+      // Token null = file định dạng CŨ (trước khi có token) → giữ hành vi cũ:
+      // xoá, vì không có cách nào biết chủ. Có token thì phải khớp.
+      if (held?.token != null && held!.token != _heldToken) {
+        await AppLog.w(
+          held.owner,
+          LogTags.lock,
+          'KHÔNG nhả lock: lock đã thuộc chu kỳ khác (chu kỳ này chạy quá lâu '
+          'và đã bị chiếm lại) — xoá sẽ mở đường cho chu kỳ thứ ba chen vào',
+        );
+        _heldToken = null;
+        return;
+      }
+      await file.delete();
+      _heldToken = null;
     } catch (_) {
       // Không xoá được → lock sẽ tự hết hạn sau [staleAfter].
     }
   }
 
+  /// Thời gian CHỜ tối đa của [runWaiting] trước khi chạy bất chấp lock.
+  static const Duration defaultWait = Duration(seconds: 75);
+
+  /// Nhịp thăm dò lock khi đang chờ.
+  static const Duration _pollInterval = Duration(seconds: 3);
+
   /// Chạy [action] khi và chỉ khi chiếm được lock. Trả null nếu bỏ lượt.
+  ///
+  /// Dành cho các chu kỳ LẶP LẠI (foreground tick, alarm backstop, WorkManager):
+  /// bỏ một lượt không mất gì vì vài phút sau lại có lượt khác.
   static Future<T?> runGuarded<T>(
     String owner,
     Future<T> Function() action,
@@ -114,13 +164,63 @@ class CycleLock {
     }
   }
 
-  static Future<({String owner, DateTime at})?> _readHolder(File file) async {
+  /// Chạy [action] sau khi CHỜ lock tối đa [wait]; hết thời gian chờ thì **vẫn
+  /// chạy** (ghi log warn).
+  ///
+  /// Dành cho việc CHỈ XẢY RA MỘT LẦN trong ngày và người dùng ĐANG ĐỢI: bản tin
+  /// hằng ngày và lượt poll tin mới. Với chúng, `runGuarded` là sai — đây là bug
+  /// thật đã quan sát được: bản tin 6:30 nổ đúng lúc WorkManager đang giữ lock,
+  /// bị bỏ lượt rồi tự hẹn lại NGÀY MAI → mất hẳn bản tin của ngày đó.
+  ///
+  /// Lock ở đây chỉ để giảm tranh chấp DB, không phải bất biến về đúng đắn — nên
+  /// khi phải chọn, ưu tiên GIAO ĐƯỢC thông báo cho người dùng.
+  static Future<T> runWaiting<T>(
+    String owner,
+    Future<T> Function() action, {
+    Duration wait = defaultWait,
+  }) async {
+    final deadline = DateTime.now().add(wait);
+    var acquired = await tryAcquire(owner);
+    if (!acquired) {
+      await AppLog.i(owner, LogTags.lock,
+          'chu kỳ khác đang chạy → CHỜ tối đa ${wait.inSeconds}s (không bỏ lượt)');
+    }
+    while (!acquired && DateTime.now().isBefore(deadline)) {
+      await Future<void>.delayed(_pollInterval);
+      acquired = await tryAcquire(owner, quiet: true);
+    }
+    if (!acquired) {
+      await AppLog.w(
+        owner,
+        LogTags.lock,
+        'chờ lock quá ${wait.inSeconds}s → CHẠY BẤT CHẤP '
+        '(thà tranh chấp DB còn hơn mất thông báo của người dùng)',
+      );
+    }
+    try {
+      return await action();
+    } finally {
+      // Chỉ nhả khi thật sự đang giữ — nếu chạy bất chấp thì lock thuộc về lớp
+      // khác, xoá đi sẽ mở đường cho một chu kỳ thứ ba chen vào.
+      if (acquired) await release();
+    }
+  }
+
+  /// Đọc chủ lock. Định dạng `owner|millis|token`; vẫn đọc được định dạng CŨ
+  /// `owner|millis` (file còn sót lại sau khi cập nhật app) với `token == null`.
+  static Future<({String owner, DateTime at, String? token})?> _readHolder(
+    File file,
+  ) async {
     try {
       final parts = (await file.readAsString()).split('|');
-      if (parts.length != 2) return null;
+      if (parts.length < 2 || parts.length > 3) return null;
       final ms = int.tryParse(parts[1]);
       if (ms == null) return null;
-      return (owner: parts[0], at: DateTime.fromMillisecondsSinceEpoch(ms));
+      return (
+        owner: parts[0],
+        at: DateTime.fromMillisecondsSinceEpoch(ms),
+        token: parts.length == 3 ? parts[2] : null,
+      );
     } catch (_) {
       return null;
     }
@@ -140,5 +240,6 @@ class CycleLock {
   /// Chỉ dùng cho TEST: trỏ lock vào thư mục tạm.
   static void debugOverrideDirectory(String dirPath) {
     _path = p.join(dirPath, _fileName);
+    _heldToken = null;
   }
 }

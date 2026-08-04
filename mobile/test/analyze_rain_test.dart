@@ -464,4 +464,198 @@ void main() {
       expect(status.segments.first.intensity, RainIntensity.light);
     });
   });
+
+  // Nhóm này khoá lại lỗi thật quan sát trong nhật ký người dùng: app tuyên bố
+  // "Trời đang mưa · Mưa nhỏ · 100%" trong khi ngoài trời chỉ ÂM U, rồi pha kẹt
+  // ở `raining` hàng chục giờ nên cảnh báo "sắp mưa" không bao giờ xuất hiện và
+  // app im lặng luôn.
+  group('AnalyzeRain - KHÔNG tuyên bố "đang mưa" từ mưa VẾT', () {
+    test('mưa vết 0.15 mm/h bây giờ + mưa thật sau 45\' ⇒ SẮP MƯA, không phải đang mưa',
+        () {
+      final minutely = List<double>.filled(60, 0.0);
+      minutely[0] = 0.15; // vết — trời âm u, OWM vẫn trả số dương
+      for (var i = 45; i < 55; i++) {
+        minutely[i] = 2.0; // mưa thật
+      }
+      final status = sut.call(_data(minutely: minutely), now: base);
+      expect(status.phase, RainPhase.rainStartingSoon,
+          reason: 'mưa vết không được coi là đang mưa');
+      expect(status.changeAt, base.add(const Duration(minutes: 45)));
+    });
+
+    test('chỉ có mưa vết suốt cửa sổ ⇒ KHÔNG phải raining', () {
+      final minutely = List<double>.filled(60, 0.2);
+      final status = sut.call(_data(minutely: minutely), now: base);
+      expect(status.phase, isNot(RainPhase.raining));
+    });
+
+    test('một mốc 0.6 mm/h đơn lẻ (không duy trì) ⇒ chưa tuyên bố đang mưa', () {
+      final minutely = List<double>.filled(60, 0.0);
+      minutely[0] = 0.6;
+      final status = sut.call(_data(minutely: minutely), now: base);
+      expect(status.isRainingNow, isFalse);
+    });
+
+    test('2 mốc liên tiếp ≥0.5 mm/h ⇒ ĐANG mưa', () {
+      final minutely = List<double>.filled(60, 0.0);
+      minutely[0] = 0.6;
+      minutely[1] = 0.7;
+      final status = sut.call(_data(minutely: minutely), now: base);
+      // Mưa tắt ngay sau đó nên pha là rainStoppingSoon — vẫn là "đang mưa".
+      expect(status.isRainingNow, isTrue);
+    });
+
+    test('mưa duy trì cả cửa sổ ⇒ pha raining', () {
+      final status = sut.call(
+        _data(minutely: List<double>.filled(60, 0.8)),
+        now: base,
+      );
+      expect(status.phase, RainPhase.raining);
+    });
+
+    test('mưa rõ ràng ≥2 mm/h ở mốc đầu ⇒ ĐANG mưa ngay, không cần chờ mốc 2', () {
+      final minutely = List<double>.filled(60, 0.0);
+      minutely[0] = 3.0;
+      final status = sut.call(_data(minutely: minutely), now: base);
+      expect(status.isRainingNow, isTrue);
+    });
+  });
+
+  group('AnalyzeRain - quan trắc: mã điều kiện YẾU cần bằng chứng lượng mưa', () {
+    test('conditionId 500 (light rain) mà rain1h = 0 ⇒ KHÔNG tuyên bố đang mưa',
+        () {
+      // Đây chính là ca người dùng gặp: OWM gán 500 cho trời âm u/ẩm cao.
+      final status = sut.call(
+        _data(
+          minutely: List<double>.filled(60, 0.0),
+          conditionId: 500,
+          rain1h: 0,
+        ),
+        now: base,
+      );
+      expect(status.phase, isNot(RainPhase.raining));
+    });
+
+    test(
+        'conditionId 500 + rain1h nhỏ NHƯNG nowcast phủ định sạch cửa sổ ⇒ '
+        'mưa đã TẠNH, không phải đang mưa', () {
+      // ⚠️ Test này TRƯỚC ĐÂY khẳng định điều ngược lại ("500 kèm rain1h > 0 ⇒
+      // tin là đang mưa"). Nhật ký thật 01/08/2026 chứng minh giả định đó sai:
+      // 12:32–12:55 `nowcast bây giờ 0.00 mm/h · mưa 1h quan trắc 0.74 mm · mã
+      // OWM 500` mà app báo "Trời đang mưa · còn mưa 80%" trong khi ngoài trời
+      // đã tạnh. `rain1h` là số TÍCH LŨY một giờ nên nó còn dư sau khi mưa tạnh.
+      // Hậu quả nặng nhất không phải câu sai mà là pha KẸT ở `raining`: không
+      // còn cảnh báo "sắp mưa" nào phát ra nữa.
+      final status = sut.call(
+        _data(
+          minutely: List<double>.filled(60, 0.0),
+          conditionId: 500,
+          rain1h: 0.3,
+        ),
+        now: base,
+      );
+      expect(status.phase, isNot(RainPhase.raining));
+    });
+
+    test('ca thật trong nhật ký: 500 + rain1h 0.74 + nowcast 0.00 ⇒ KHÔNG raining',
+        () {
+      final status = sut.call(
+        _data(
+          minutely: List<double>.filled(60, 0.0),
+          conditionId: 500,
+          rain1h: 0.74,
+        ),
+        now: base,
+      );
+      expect(status.phase, isNot(RainPhase.raining));
+      // Và vì không phải "đang mưa" nên KHÔNG bị ép sàn xác suất 80% —
+      // đây chính là con số vô lý người dùng thấy trên thông báo.
+      expect(status.probabilityPct, isNot(80));
+    });
+
+    test('conditionId 500 + rain1h LỚN (≥2mm) ⇒ vẫn tin là đang mưa dù nowcast khô',
+        () {
+      // Van chặn phải HẸP: mưa nhỏ liên tục cả giờ thì nowcast bỏ sót, không
+      // phải "dư của cơn đã tạnh" — nowcast ở VN bỏ sót mưa là chuyện thường.
+      final status = sut.call(
+        _data(
+          minutely: List<double>.filled(60, 0.0),
+          conditionId: 500,
+          rain1h: 2.5,
+        ),
+        now: base,
+      );
+      expect(status.phase, RainPhase.raining);
+    });
+
+    test('conditionId 500 + rain1h nhỏ nhưng nowcast thấy mưa SẮP tới ⇒ raining',
+        () {
+      // Nowcast chỉ TRỄ chứ không phủ định → quan trắc vẫn thắng.
+      final minutely = List<double>.filled(60, 0.0);
+      for (var i = 10; i < 30; i++) {
+        minutely[i] = 1.0;
+      }
+      final status = sut.call(
+        _data(minutely: minutely, conditionId: 500, rain1h: 0.3),
+        now: base,
+      );
+      expect(status.phase, RainPhase.raining);
+    });
+
+    test('không có nowcast: 500 + rain1h nhỏ ⇒ vẫn tin quan trắc (không có gì phủ định)',
+        () {
+      final status = sut.call(
+        _data(hourly: [_h(12, 0.2, 0)], conditionId: 500, rain1h: 0.6),
+        now: base,
+      );
+      expect(status.phase, RainPhase.raining);
+    });
+
+    test('drizzle 3xx mà rain1h = 0 ⇒ KHÔNG tuyên bố đang mưa', () {
+      final status = sut.call(
+        _data(
+          minutely: List<double>.filled(60, 0.0),
+          conditionId: 301,
+          rain1h: 0,
+        ),
+        now: base,
+      );
+      expect(status.phase, isNot(RainPhase.raining));
+    });
+
+    test('mã MẠNH 501 (mưa vừa) vẫn tin ngay dù rain1h = 0', () {
+      final status = sut.call(
+        _data(
+          minutely: List<double>.filled(60, 0.0),
+          conditionId: 501,
+          rain1h: 0,
+        ),
+        now: base,
+      );
+      expect(status.phase, RainPhase.raining);
+    });
+
+    test('dông 2xx vẫn tin ngay dù rain1h = 0', () {
+      final status = sut.call(
+        _data(
+          minutely: List<double>.filled(60, 0.0),
+          conditionId: 202,
+          rain1h: 0,
+        ),
+        now: base,
+      );
+      expect(status.phase, RainPhase.raining);
+    });
+  });
+
+  group('AnalyzeRain - hourly fallback không được coi pop suông là ĐANG mưa', () {
+    test('giờ hiện tại pop 80% nhưng không có mm ⇒ không phải raining', () {
+      // Trước fix, `_isWetHour` (pop >= 0.5) làm giờ hiện tại thành "đang mưa".
+      final status = sut.call(
+        _data(hourly: [_h(12, 0.8, 0), _h(13, 0.8, 0)]),
+        now: base,
+      );
+      expect(status.phase, isNot(RainPhase.raining));
+    });
+  });
 }

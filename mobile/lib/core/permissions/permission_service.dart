@@ -36,6 +36,46 @@ class PermissionService {
     }
   }
 
+  /// Quyền vị trí đã ở mức "LUÔN CHO PHÉP" (background location) chưa?
+  ///
+  /// Quan trọng hơn nó nghe: [ensureLocationPermission] chỉ xin được mức "khi
+  /// đang dùng app". Với mức đó, các isolate NỀN (alarm / foreground service /
+  /// WorkManager) **không xin được toạ độ mới**, nên chúng phải dùng lại toạ độ
+  /// đã lưu từ lần mở app gần nhất — nghĩa là bạn di chuyển mà app vẫn báo thời
+  /// tiết của chỗ CŨ. Đây là nguyên nhân đã xác nhận trong nhật ký ("hệ thống
+  /// không có last-known → thử toạ độ đã lưu" lặp lại mọi chu kỳ).
+  Future<bool> hasBackgroundLocation() async {
+    try {
+      return await Geolocator.checkPermission() == LocationPermission.always;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Xin quyền vị trí nền ("Luôn cho phép").
+  ///
+  /// Android yêu cầu xin mức foreground TRƯỚC, và từ Android 11 thì lời xin nền
+  /// KHÔNG hiện hộp thoại mà mở trang cài đặt hệ thống — nên hàm này fallback mở
+  /// cài đặt app khi không được cấp trực tiếp.
+  Future<bool> requestBackgroundLocation() async {
+    try {
+      // Bắt buộc có foreground trước, nếu không hệ thống từ chối thẳng.
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.always) return true;
+
+      final status = await ph.Permission.locationAlways.request();
+      if (status.isGranted) return true;
+      // Android 11+: phải tự chọn "Luôn cho phép" trong cài đặt.
+      await ph.openAppSettings();
+      return await hasBackgroundLocation();
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// Xin quyền thông báo (Android 13+/iOS). Trả false nếu bị từ chối — app
   /// vẫn chạy, chỉ là không gửi được alert.
   Future<bool> requestNotificationPermission() async {

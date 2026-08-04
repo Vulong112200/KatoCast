@@ -118,6 +118,18 @@ class AppLog {
         _approxSize = await file.exists() ? await file.length() : 0;
       }
       if (_approxSize + incomingBytes <= AppConfig.logMaxBytesPerFile) return;
+
+      // ⚠️ Tới ngưỡng thì XÁC MINH bằng kích thước THẬT trước khi rotate.
+      // `_approxSize` là biến static nên mỗi isolate giữ một bản riêng: khi
+      // isolate này rotate, các isolate khác (foreground service sống hàng giờ,
+      // alarm, worker) vẫn mang con số CŨ đã cộng dồn. Isolate mang số cũ sẽ
+      // rotate oan một file mới còn bé — và vì rotate xoá `kato.1.log`, nó xoá
+      // luôn phần nhật ký vừa được dồn sang đó. Đúng lúc cần tra lịch sử nhất
+      // (sự cố nền kéo dài nhiều ngày) thì lịch sử biến mất. Một lần `length()`
+      // ở sát ngưỡng là giá quá rẻ để tránh chuyện đó.
+      _approxSize = await file.exists() ? await file.length() : 0;
+      if (_approxSize + incomingBytes <= AppConfig.logMaxBytesPerFile) return;
+
       if (await file.exists()) {
         final rotated = File(_rotatedPath!);
         if (await rotated.exists()) await rotated.delete();

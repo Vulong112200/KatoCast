@@ -8,6 +8,7 @@ import '../../domain/entities/place.dart';
 import '../../domain/repositories/location_repository.dart';
 import '../datasources/location_datasource.dart';
 import '../datasources/nominatim_datasource.dart';
+import '../place_label_resolver.dart';
 
 class LocationRepositoryImpl implements LocationRepository {
   final LocationDataSource _dataSource;
@@ -52,6 +53,10 @@ class LocationRepositoryImpl implements LocationRepository {
         (osm.thoroughfare != null ||
             osm.subLocality != null ||
             osm.subAdministrativeArea != null)) {
+      // Chia sẻ kết quả sang cache dùng chung: các isolate NỀN đọc lại nhãn này
+      // cho nhật ký thay vì tự bắn thêm một request Nominatim (chính sách OSM
+      // giới hạn ~1 req/s, và nền chạy mỗi 5–15' × 3 lớp trigger).
+      await PlaceLabelResolver.seedCache(coords, osm);
       return osm;
     }
 

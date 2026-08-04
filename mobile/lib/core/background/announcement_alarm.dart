@@ -5,6 +5,7 @@ import '../../features/announcements/data/announcement_remote_data_source.dart';
 import '../../features/announcements/data/announcement_repository.dart';
 import '../../features/announcements/data/announcement_scheduler.dart';
 import '../../features/announcements/domain/entities/announcement.dart';
+import '../config/app_config.dart';
 import '../database/app_database.dart';
 import '../diagnostics/app_log.dart';
 import '../diagnostics/log_entry.dart';
@@ -30,32 +31,47 @@ Future<void> _runCheck(int id) async {
   AnnouncementPrefs? prefs;
   try {
     prefs = await AnnouncementPrefsStore().read();
-    if (!prefs.enabled) {
-      await AppLog.i(src, LogTags.announce, 'theo dõi tin đang TẮT → bỏ lượt');
-      return;
+  } catch (e, st) {
+    await AppLog.e(src, LogTags.announce, 'không đọc được cài đặt theo dõi tin',
+        error: e, stack: st);
+  }
+
+  // RE-ARM TRƯỚC, LÀM VIỆC SAU — isolate nền có thể bị OEM giết giữa chu kỳ
+  // (đã quan sát trên đường alarm thời tiết: nổ rồi chết, không kịp re-arm →
+  // chuỗi đứt hàng giờ). Đặt lịch ngày mai ngay từ đầu để chuỗi tự duy trì.
+  try {
+    if (prefs == null || prefs.enabled) {
+      await scheduleAnnouncementSlot(
+        id,
+        prefs?.checkMinutes ?? AppConfig.announcementCheckDefaultMinutes,
+        source: src,
+      );
     }
-    // Cycle lock: lượt poll cũng ghi Drift (bảng đã-thấy) nên phải xếp hàng với
-    // chu kỳ thời tiết, tránh `database is locked`.
-    await CycleLock.runGuarded(src, () => _fetchAndNotify(prefs!, src));
+  } catch (e, st) {
+    await AppLog.e(
+      src,
+      LogTags.arm,
+      'RE-ARM poll tin THẤT BẠI — có thể mất lượt tới khi mở lại app',
+      error: e,
+      stack: st,
+      data: {'id': id},
+    );
+  }
+
+  if (prefs == null) return;
+  if (!prefs.enabled) {
+    await AppLog.i(src, LogTags.announce, 'theo dõi tin đang TẮT → bỏ lượt');
+    return;
+  }
+
+  try {
+    // CHỜ lock chứ KHÔNG bỏ lượt: mỗi ngày chỉ có một lượt poll, bỏ là mất tin
+    // cả ngày (đã quan sát: lượt poll bị bỏ vì WorkManager đang giữ lock).
+    await CycleLock.runWaiting(src, () => _fetchAndNotify(prefs!, src));
   } catch (e, st) {
     await AppLog.e(src, LogTags.announce, 'lỗi khi kiểm tra tin mới',
         error: e, stack: st);
   } finally {
-    try {
-      final p = prefs ?? await AnnouncementPrefsStore().read();
-      if (p.enabled) {
-        await scheduleAnnouncementSlot(id, p.checkMinutes, source: src);
-      }
-    } catch (e, st) {
-      await AppLog.e(
-        src,
-        LogTags.arm,
-        'RE-ARM poll tin THẤT BẠI — có thể mất lượt tới khi mở lại app',
-        error: e,
-        stack: st,
-        data: {'id': id},
-      );
-    }
     await AppLog.flush();
   }
 }

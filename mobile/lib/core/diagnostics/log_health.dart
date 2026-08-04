@@ -93,9 +93,24 @@ class LogHealth {
           lastNotifyAt ??= e.ts;
           if (recent) notifies++;
         case LogTags.arm:
-          // Chỉ tin mốc của alarm CHÍNH (bỏ digest/announce/heartbeat) để con số
+          // Chỉ tin mốc của alarm THỜI TIẾT (bỏ digest/announce) để con số
           // "alarm kế tiếp" đúng nghĩa "lần cập nhật thời tiết kế tiếp".
-          if (nextAlarmAt == null && e.source == LogSource.alarm) {
+          //
+          // ⚠️ Lọc theo NHÃN `loại`, KHÔNG theo `source`. Bản cũ đòi
+          // `source == LogSource.alarm`, nhưng mốc alarm thời tiết cũng được đặt
+          // từ lớp khác: mở app (`ui`) và WorkManager watchdog (`worker`). Khi
+          // dòng mới nhất đến từ các lớp đó, LogHealth bỏ qua nó và lấy dòng CŨ
+          // hơn → thẻ Tình trạng hiện một mốc quá hạn hàng chục giờ ngay sau khi
+          // app vừa đặt mốc mới (nhật ký thật 04/08: "Alarm kế tiếp 14:43:19 —
+          // ĐÃ QUÁ HẠN 45h50" trong khi 12:33:36 vừa đặt mốc 12:40).
+          //
+          // `entries` đi từ MỚI → CŨ nên dòng khớp đầu tiên là mốc mới nhất.
+          // Điều kiện `source == alarm` giữ lại để tương thích nhật ký cũ (ghi
+          // trước khi có nhãn `loại`).
+          final armKind = e.data[LogTags.armKindKey];
+          if (nextAlarmAt == null &&
+              (armKind == LogTags.armKindWeather ||
+                  (armKind == null && e.source == LogSource.alarm))) {
             final at = e.data['at'];
             if (at is int) nextAlarmAt = DateTime.fromMillisecondsSinceEpoch(at);
           }

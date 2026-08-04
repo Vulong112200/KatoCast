@@ -31,8 +31,30 @@ class AppConfig {
   /// Ngôn ngữ mô tả thời tiết trả về.
   static const String owmLang = 'vi';
 
-  /// Ngưỡng coi là "có mưa" (mm/h). Dưới ngưỡng coi như khô (lọc nhiễu).
+  /// Ngưỡng coi là "có mưa" (mm/h) khi DỰ BÁO phía trước. Thấp để không bỏ sót
+  /// cảnh báo sớm — thà nói "sắp có mưa nhỏ" hơn là im lặng.
   static const double rainThresholdMmH = 0.1;
+
+  /// Ngưỡng để TUYÊN BỐ "trời ĐANG mưa" (mm/h) — cao hơn [rainThresholdMmH].
+  ///
+  /// ⚠️ Vì sao phải tách hai ngưỡng: nowcast của OWM ở VN thường xuyên trả những
+  /// giá trị vết 0.1–0.2 mm/h khi trời chỉ ÂM U/ẩm cao. Dùng chung ngưỡng 0.1 để
+  /// tuyên bố "đang mưa" gây hai hậu quả thật đã quan sát trong nhật ký:
+  /// (1) app báo "Trời đang mưa · Mưa nhỏ · 100%" trong khi ngoài trời chỉ âm u;
+  /// (2) pha KẸT ở `raining` hàng chục giờ → `rainStartingSoon` không bao giờ
+  ///     tới được, nên người dùng KHÔNG BAO GIỜ nhận được cảnh báo "sắp mưa",
+  ///     và vì cảnh báo chỉ phát khi pha đổi nên app im lặng luôn.
+  /// 0.5 mm/h là mức mưa mà người đi đường thật sự cảm nhận được.
+  static const double rainNowThresholdMmH = 0.5;
+
+  /// Số mốc nowcast liên tiếp phải cùng vượt [rainNowThresholdMmH] mới tuyên bố
+  /// "đang mưa" — chống một mốc nhiễu đơn lẻ bật cả pha. Nowcast 4.0 bước 15'
+  /// nên 2 mốc ≈ nửa giờ có mưa liên tục.
+  static const int rainNowSustainedSlots = 2;
+
+  /// Lượng mưa nowcast (mm/h) đủ lớn để tuyên bố "đang mưa" NGAY LẬP TỨC, không
+  /// cần chờ mốc thứ hai — mưa cỡ này thì không thể là nhiễu.
+  static const double rainNowObviousMmH = 2.0;
 
   /// Số phút khô liên tiếp cần xác nhận để coi là "đã tạnh" (chống nhiễu 1 phút).
   static const int dryStreakToConfirmStop = 3;
@@ -68,7 +90,18 @@ class AppConfig {
   /// Lượng mưa quan trắc 1h gần nhất (mm) đủ lớn để coi là "đang mưa" kể cả
   /// khi mã điều kiện chưa chuyển sang nhóm mưa (cao hơn ngưỡng lọc nhiễu vì
   /// rain1h là số tích lũy, có thể còn dư sau khi mưa vừa tạnh).
+  ///
+  /// ⚠️ Ngưỡng này CHỈ áp khi nowcast không phủ định sạch cửa sổ của nó — vì
+  /// `rain1h` là số TÍCH LŨY nên nó vẫn > 0 gần một tiếng sau khi mưa đã tạnh.
+  /// Xem `AnalyzeRain._obsIndicatesRain` và [rainObsHeavyMm1hThreshold].
   static const double rainObsMm1hThreshold = 0.5;
+
+  /// Lượng mưa quan trắc 1h (mm) LỚN tới mức chắc chắn đang mưa thật, kể cả khi
+  /// nowcast bảo cả cửa sổ đều khô (nowcast ở VN bỏ sót mưa là chuyện thường).
+  ///
+  /// Đặt cao hơn nhiều [rainObsMm1hThreshold] vì đây là mức không thể chỉ là
+  /// "dư của cơn mưa vừa tạnh": 2 mm trong một giờ là mưa nhỏ liên tục.
+  static const double rainObsHeavyMm1hThreshold = 2.0;
 
   /// Ngưỡng pop để một giờ hourly được tin là "chắc chắn mưa" khi nó MÂU THUẪN
   /// với nowcast (nowcast bảo khô). Nowcast ở VN hay bỏ sót mưa nên hourly có
@@ -147,10 +180,30 @@ class AppConfig {
   static const int cacheMaxAgeDays = 7;
 
   /// Vị trí "last known" cũ hơn ngưỡng này (giờ) coi là không đáng tin ở
-  /// background → fallback sang toạ độ đã lưu (LastLocationStore) thay vì bỏ
-  /// qua. 24h vì máy đứng yên qua đêm ở nhà là bình thường, vị trí cũ vẫn đúng
-  /// khu vực; điều này cho phép bản tin sáng dùng dữ liệu tươi.
+  /// background → thử xin fix tươi, rồi mới fallback toạ độ đã lưu
+  /// (LastLocationStore). 24h vì máy đứng yên qua đêm ở nhà là bình thường.
   static const int backgroundLastKnownMaxAgeHours = 24;
+
+  /// Toạ độ nền cũ hơn ngưỡng này (phút) thì CHỦ ĐỘNG xin một fix vị trí mới.
+  ///
+  /// Vì sao cần: `Geolocator.getLastKnownPosition()` thường trả null trên máy
+  /// thật (không app nào vừa định vị → cache hệ thống rỗng), nên nền luôn rơi về
+  /// `LastLocationStore` — mà store đó chỉ được cập nhật khi người dùng MỞ APP.
+  /// Hệ quả: đang di chuyển thì nền vẫn báo thời tiết của chỗ cũ. Xin fix tươi
+  /// định kỳ là cách duy nhất để nền biết mình đã đổi vị trí.
+  static const int backgroundCoordsFreshMinutes = 25;
+
+  /// Thời gian chờ tối đa (giây) khi xin fix vị trí ở nền. Ngắn thôi: chu kỳ nền
+  /// không được treo, và thiếu vị trí thì đã có toạ độ đã lưu để fallback.
+  static const int backgroundFixTimeoutSeconds = 25;
+
+  /// Khoảng dịch chuyển (mét) đủ lớn để coi là "đã đổi khu vực" — dùng để ghi
+  /// nhật ký nổi bật, giúp đối chiếu khi nghi app báo thời tiết sai chỗ.
+  static const int locationMovedNoticeMeters = 3000;
+
+  /// Toạ độ đang dùng cũ hơn ngưỡng này (giờ) → ghi cảnh báo trong nhật ký, vì
+  /// lúc đó thời tiết gần như chắc chắn không còn phản ánh nơi người dùng đứng.
+  static const int backgroundCoordsStaleWarnHours = 6;
 
   // --- Bản tin thời tiết hằng ngày ---
 

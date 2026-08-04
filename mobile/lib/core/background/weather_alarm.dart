@@ -12,11 +12,16 @@ import '../diagnostics/log_tags.dart';
 import '../notifications/notification_service.dart';
 import 'cycle_lock.dart';
 import 'background_prefs.dart';
-import 'foreground_service.dart';
+import 'service_health.dart';
 import 'weather_check.dart';
 
 /// ID alarm kiểm tra thời tiết (khác các ID bản tin 1005/1006 và ID ghi chú).
 const int kWeatherAlarmId = 2001;
+
+/// Giá trị khoá `loại` trong nhật ký của dòng "đặt alarm thời tiết kế tiếp".
+/// `LogHealth` lọc theo nhãn này để lấy đúng mốc alarm THỜI TIẾT kế tiếp, bất kể
+/// lớp nào đã đặt (alarm tự re-arm, WorkManager dựng lại, hay mở app).
+const String kWeatherAlarmKind = LogTags.armKindWeather;
 
 /// Khoá SharedPreferences lưu mốc alarm kế tiếp ĐÃ ĐẶT (ms epoch). Dùng để lớp
 /// khác (WorkManager) phát hiện chuỗi alarm đã ĐỨT mà dựng lại — thay vì cứ
@@ -42,7 +47,7 @@ const int kFallbackRetryMinutes = 5;
 ///
 /// Nay ban đêm alarm vẫn nhảy từng chặng ~2 tiếng. Mỗi chặng KHÔNG lấy dữ liệu
 /// (vẫn mát máy, vẫn tiết kiệm hạn mức API) — chỉ tự kiểm tra và sửa chuỗi:
-/// re-arm chính nó, hồi sinh foreground service nếu bị giết, tự chữa lịch bản
+/// re-arm chính nó, ghi nhận tình trạng foreground service, tự chữa lịch bản
 /// tin. Mất một chặng thì chỉ mất 2 tiếng thay vì cả đêm.
 const Duration kNightHopInterval = Duration(hours: 2);
 
@@ -99,6 +104,13 @@ Future<void> scheduleWeatherAlarm({
     LogTags.arm,
     'đặt alarm thời tiết kế tiếp',
     data: {
+      // `loại`: nhãn ỔN ĐỊNH để `LogHealth` nhận ra đây là alarm THỜI TIẾT (chứ
+      // không phải bản tin/poll tin) mà KHÔNG cần đoán qua `source`. Trước đây
+      // LogHealth chỉ nhận dòng có `source == alarm`, nên khi mốc mới nhất do
+      // lớp khác đặt (mở app / WorkManager dựng lại) thì nó bỏ qua và lấy dòng
+      // CŨ hơn — thẻ Tình trạng hiện "Alarm kế tiếp 14:43 — ĐÃ QUÁ HẠN 45h50"
+      // ngay sau khi app vừa đặt mốc mới cách đó 1 giây.
+      LogTags.armKindKey: kWeatherAlarmKind,
       'lúc': fireAt.toLocal().toString(),
       'at': fireAt.millisecondsSinceEpoch,
       'sau': '${fireAt.difference(now).inMinutes}p',
@@ -144,12 +156,36 @@ Future<void> _run() async {
       data: {'id': kWeatherAlarmId});
 
   final withinWindow = await isWithinActiveHours(DateTime.now());
-  var retrySoon = false;
 
+  // ⚠️ RE-ARM NGAY, TRƯỚC MỌI VIỆC KHÁC — đây là mắt xích giữ cả hệ thống nền
+  // sống.
+  //
+  // Trước đây re-arm nằm ở CUỐI hàm. Nhật ký thật cho thấy hậu quả: 28/07
+  // 06:34:03 ghi "alarm nổ" rồi tiến trình chết ngay sau đó — không có cả dòng
+  // kiểm tra khung giờ — nên không kịp re-arm và **chuỗi đứt 7 giờ 18 phút**
+  // (đúng khoảng "sáng ra app không lấy dữ liệu"). Cùng kiểu, 29/07 mốc 02:14
+  // không bao giờ nổ và WorkManager phải dựng lại lúc 07:50.
+  //
+  // Đặt lịch trước biến chuỗi thành TỰ DUY TRÌ: dù phần dưới có bị OEM giết
+  // giữa đường thì mốc kế tiếp đã nằm trong AlarmManager của hệ thống. Đánh đổi
+  // duy nhất là mốc chưa biết `retrySoon`; bù lại bằng việc arm lại sớm hơn ở
+  // cuối chu kỳ khi fetch thất bại (xem dưới).
   try {
-    // Hồi sinh FG service KHÔNG cần DB nên để ngoài lock — đây là việc quan
-    // trọng nhất của alarm với vai trò backstop, phải chạy kể cả khi bị bỏ lượt.
-    await _reviveForegroundServiceIfNeeded(src);
+    await scheduleWeatherAlarm(source: src);
+  } catch (e, st) {
+    await AppLog.e(
+      src,
+      LogTags.arm,
+      'RE-ARM THẤT BẠI — chuỗi alarm có thể đứt tới khi WorkManager dựng lại',
+      error: e,
+      stack: st,
+    );
+  }
+
+  var retrySoon = false;
+  try {
+    // Ghi nhận FG service còn sống hay đã chết (KHÔNG start lại — xem hàm dưới).
+    await _reportForegroundServiceState(src);
 
     if (!withinWindow) {
       // Chặng đêm: KHÔNG lấy dữ liệu, KHÔNG mở DB. Vẫn tự chữa lịch bản tin để
@@ -198,41 +234,59 @@ Future<void> _run() async {
         error: e, stack: st);
   }
 
-  // Re-arm cho chặng kế tiếp (one-shot không tự lặp). LUÔN re-arm, kể cả khi
-  // phần trên lỗi — đây là mắt xích giữ cả chuỗi nền sống.
-  try {
-    await scheduleWeatherAlarm(retrySoon: retrySoon, source: src);
-  } catch (e, st) {
-    await AppLog.e(
-      src,
-      LogTags.arm,
-      'RE-ARM THẤT BẠI — chuỗi alarm có thể đứt tới khi mở lại app',
-      error: e,
-      stack: st,
-    );
+  // Fetch nền thất bại (chỉ có cache cũ) → RÚT NGẮN mốc đã arm ở đầu chu kỳ để
+  // mau có dữ liệu tươi khi radio tỉnh. Chỉ ghi đè khi thật sự cần, nên đường
+  // bình thường vẫn giữ đúng mốc đã đặt từ đầu.
+  if (retrySoon) {
+    try {
+      await scheduleWeatherAlarm(retrySoon: true, source: src);
+    } catch (e, st) {
+      await AppLog.e(src, LogTags.arm, 'rút ngắn mốc thử lại THẤT BẠI',
+          error: e, stack: st);
+    }
   }
   // Isolate alarm kết thúc ngay sau đây → đẩy hết nhật ký còn trong hàng đợi.
   await AppLog.flush();
 }
 
-/// Hồi sinh foreground service nếu người dùng đang bật FG mà service không còn
-/// chạy (bị Doze/OEM giết mà tiến trình CHƯA force-stop).
+/// GHI NHẬN trạng thái foreground service. **KHÔNG start lại.**
 ///
-/// KHÔNG dùng `restartService()` ở đây: nó reset pha lặp của FG về đúng pha của
-/// alarm, khiến hai lớp tick cùng một thời điểm mãi mãi — chính là nguyên nhân
-/// tranh chấp DB và thông báo trùng. Chỉ start khi service THẬT SỰ đã chết.
-Future<void> _reviveForegroundServiceIfNeeded(String src) async {
+/// ⚠️ Bản trước của hàm này là NGUYÊN NHÂN GỐC của lỗi nặng nhất trong app: nó
+/// gọi `startWeatherForegroundService()` từ isolate alarm khi thấy service đã
+/// chết. Từ Android 12 (API 31), start FGS khi app ở nền bị hệ thống từ chối —
+/// và `flutter_foreground_task` gọi `startForeground()` trong `onStartCommand`
+/// KHÔNG có try/catch, nên `ForegroundServiceStartNotAllowedException` bay lên
+/// luồng chính và **giết cả tiến trình**. Vì lỗi xảy ra ở tầng Java/Service,
+/// `try/catch` ở Dart KHÔNG bắt được — bản cũ có catch nhưng vô dụng.
+///
+/// Nhật ký thật 02/08/2026 là bằng chứng: 12:58, 13:13, 13:28, 13:43, 14:13,
+/// 14:28 — mỗi mốc ghi "thử hồi sinh" rồi im lặng tuyệt đối (không có cả dòng
+/// thành công lẫn dòng lỗi), tức tiến trình sập ngay tại đó. Sau lần thứ sáu,
+/// hệ thống force-stop app → hủy SẠCH alarm one-shot **và** job WorkManager →
+/// app đứng im **46 tiếng** tới khi người dùng mở app (`chiếm lại lock quá hạn ·
+/// đã: 2765m`). Đây chính là "dùng càng lâu, càng không restart máy thì càng
+/// lỗi": một lần FG service chết là app tự sập mỗi 15 phút cho tới khi bị khai
+/// tử hoàn toàn.
+///
+/// Đường hồi phục ĐÚNG (xem [ForegroundServiceHealth]):
+/// 1. khi app hiển thị với người dùng → `applyBackgroundTriggers` bật lại (hợp
+///    pháp vì lúc đó app ở foreground);
+/// 2. `RestartReceiver` của plugin (dùng `setAlarmClock`, được hệ thống miễn
+///    trừ) tự start lại khi service bị giết mà tiến trình còn sống;
+/// 3. im lặng quá lâu → một thông báo nhắc mở app.
+/// Trong lúc đó alarm exact + WorkManager vẫn cập nhật đầy đủ, chỉ trễ hơn.
+Future<void> _reportForegroundServiceState(String src) async {
   try {
-    if (!await BackgroundPrefsStore().foregroundEnabled()) return;
-    if (await FlutterForegroundTask.isRunningService) return;
-    await startWeatherForegroundService(allowRestart: false);
-    await AppLog.w(
-      src,
-      LogTags.service,
-      'foreground service đã chết → alarm hồi sinh lại',
-    );
+    if (!await BackgroundPrefsStore().foregroundEnabled()) {
+      await AppLog.i(src, LogTags.service,
+          'người dùng đã TẮT theo dõi liên tục → không theo dõi tình trạng');
+      return;
+    }
+    final running = await FlutterForegroundTask.isRunningService;
+    await ForegroundServiceHealth.reportFromBackground(src, running: running);
   } catch (e, st) {
-    await AppLog.e(src, LogTags.service, 'không hồi sinh được foreground service',
+    await AppLog.e(src, LogTags.service,
+        'không đọc được tình trạng foreground service',
         error: e, stack: st);
   }
 }

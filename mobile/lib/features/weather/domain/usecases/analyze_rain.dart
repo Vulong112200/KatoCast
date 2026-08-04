@@ -48,7 +48,16 @@ class AnalyzeRain {
     // Quan trắc `current` nói ĐANG MƯA nhưng dự báo ngắn bảo khô/mới sắp mưa
     // → tin quan trắc. Không có bước này, nowcast bỏ sót sẽ khiến app im lặng
     // dù trời đã mưa (người dùng chỉ nhận thông báo "tình hình" đến muộn).
-    if (!base.isRainingNow && _obsIndicatesRain(data.current, ref)) {
+    //
+    // [nowcastSawNoRainAtAll] chặn ca NGƯỢC LẠI: mưa VỪA TẠNH, `rain1h` còn dư
+    // — xem [_obsIndicatesRain].
+    if (!base.isRainingNow &&
+        _obsIndicatesRain(
+          data.current,
+          ref,
+          nowcastSawNoRainAtAll:
+              minutely.isNotEmpty && base.phase == RainPhase.dry,
+        )) {
       base = RainStatus.raining(fromMinutely: base.fromMinutely);
     }
 
@@ -78,18 +87,66 @@ class AnalyzeRain {
     );
   }
 
-  /// Quan trắc hiện tại có cho thấy đang mưa không: mã điều kiện thuộc nhóm
-  /// dông (2xx) / mưa phùn (3xx) / mưa (5xx), hoặc lượng mưa 1h gần nhất đủ
-  /// lớn. Quan trắc quá cũ so với [ref] thì bỏ qua (không đại diện "bây giờ").
-  bool _obsIndicatesRain(CurrentWeather current, DateTime ref) {
+  /// Quan trắc hiện tại có cho thấy đang mưa không.
+  ///
+  /// ⚠️ KHÔNG tin `conditionId` một mình cho các mã YẾU. OpenWeatherMap gán rất
+  /// thoáng mã 500 ("light rain") và nhóm 3xx ("drizzle") cho trời chỉ âm u/ẩm
+  /// cao — nhật ký thật cho thấy app tuyên bố "Trời đang mưa" trong khi ngoài
+  /// trời chưa mưa. Nên:
+  /// - mã MẠNH và không thể nhầm (dông 2xx, mưa vừa/to 501+) → tin ngay;
+  /// - mã YẾU (500 light rain, 3xx drizzle) → chỉ tin khi có **bằng chứng lượng
+  ///   mưa thật** (`rain1h`) kèm theo.
+  /// Quan trắc quá cũ so với [ref] thì bỏ qua (không đại diện "bây giờ").
+  ///
+  /// [nowcastSawNoRainAtAll] = nowcast có dữ liệu và KHÔNG thấy mưa ở bất kỳ
+  /// đâu trong cửa sổ của nó (kết luận `dry`, không phải "sắp mưa"). Đây là cái
+  /// van chặn ca MƯA VỪA TẠNH:
+  ///
+  /// `current.rain1h` là lượng mưa **TÍCH LŨY của một giờ vừa qua**, KHÔNG phải
+  /// cường độ lúc này. Mưa tạnh rồi nó vẫn > 0 suốt gần một tiếng, và OWM còn
+  /// giữ nguyên mã 500 kèm theo. Bản cũ chỉ cần `rain1h >= 0.5` là tuyên bố
+  /// "đang mưa" bất kể nowcast → nhật ký thật 01/08/2026 12:32–12:55:
+  /// `nowcast bây giờ 0.00 mm/h · mưa 1h quan trắc 0.74 mm · mã OWM 500` mà app
+  /// vẫn báo "Trời đang mưa · khả năng còn mưa 80%" (80% do sàn xác suất chỉ áp
+  /// khi ĐANG mưa). Hậu quả nặng hơn cả câu sai: pha KẸT ở `raining` nên
+  /// `rainStartingSoon` không bao giờ tới và app im lặng hoàn toàn — nhật ký lặp
+  /// lại "KHÔNG báo — pha trước raining, pha nay raining" hàng chục phút liền.
+  ///
+  /// Van này cố ý HẸP để không làm sống lại lỗi ngược (nowcast VN hay bỏ sót
+  /// mưa → app im lặng khi trời đã mưa thật). Nó KHÔNG chặn:
+  /// - mã MẠNH (dông/mưa vừa trở lên): nowcast sai thì nowcast chịu;
+  /// - lượng mưa quan trắc LỚN ([AppConfig.rainObsHeavyMm1hThreshold]);
+  /// - khi nowcast thấy mưa sắp tới (nowcast chỉ TRỄ, không phải phủ định).
+  bool _obsIndicatesRain(
+    CurrentWeather current,
+    DateTime ref, {
+    bool nowcastSawNoRainAtAll = false,
+  }) {
     final age = ref.difference(current.time);
     if (age > const Duration(minutes: AppConfig.rainObsMaxAgeMinutes)) {
       return false;
     }
+
     final id = current.conditionId;
-    final rainCondition =
-        id != null && ((id >= 200 && id < 400) || (id >= 500 && id < 600));
-    return rainCondition || current.rain1h >= AppConfig.rainObsMm1hThreshold;
+    // Dông (2xx) hoặc mưa vừa trở lên (501+) — mã không thể nhầm với trời âm u.
+    final strongRainCode =
+        id != null && ((id >= 200 && id < 300) || (id > 500 && id < 600));
+    if (strongRainCode) return true;
+
+    // Mưa quan trắc RẤT nhiều → đang mưa thật, không thể là dư của cơn đã tạnh.
+    if (current.rain1h >= AppConfig.rainObsHeavyMm1hThreshold) return true;
+
+    // Từ đây bằng chứng chỉ ở mức YẾU (mã 500/3xx, hoặc chỉ có `rain1h` vừa
+    // phải). Nowcast phủ định sạch cả cửa sổ → tin nowcast: mưa đã tạnh.
+    if (nowcastSawNoRainAtAll) return false;
+
+    // Lượng mưa quan trắc đủ lớn → coi là đang mưa, bất kể mã điều kiện.
+    if (current.rain1h >= AppConfig.rainObsMm1hThreshold) return true;
+
+    if (id == null) return false;
+    // Mã YẾU: 500 (light rain) / 3xx (drizzle) → cần có lượng mưa đo được.
+    final weakRainCode = id == 500 || (id >= 300 && id < 400);
+    return weakRainCode && current.rain1h > 0;
   }
 
   /// Giữ các mốc minutely từ slot hiện tại trở đi. Trả rỗng nếu toàn bộ chuỗi
@@ -122,6 +179,34 @@ class AnalyzeRain {
 
   // --- Tiêu chí "ướt" cho một giờ hourly ---
 
+  /// Nowcast có khẳng định **ĐANG mưa ngay lúc này** không?
+  ///
+  /// Đây là quyết định dễ sai nhất trong toàn bộ logic mưa, nên nó có tiêu chí
+  /// RIÊNG, chặt hơn tiêu chí "sắp mưa":
+  /// - mưa rõ ràng ([AppConfig.rainNowObviousMmH]) → tuyên bố ngay;
+  /// - còn lại phải đạt [AppConfig.rainNowThresholdMmH] và **duy trì** qua
+  ///   [AppConfig.rainNowSustainedSlots] mốc liên tiếp.
+  ///
+  /// Nếu chỉ dùng một ngưỡng thấp cho một mốc đơn lẻ (bản cũ: `> 0.1` tại
+  /// `minutely.first`) thì mưa VẾT lúc trời âm u cũng bật pha `raining`, và vì
+  /// pha chỉ đổi khi giá trị khác đi, app sẽ KẸT ở "đang mưa" nhiều giờ: không
+  /// còn cảnh báo "sắp mưa", cũng không còn thông báo nào cả.
+  bool _nowcastSaysRainingNow(List<MinutelyForecast> minutely) {
+    final now = minutely.first.precipitationMmH;
+    if (now >= AppConfig.rainNowObviousMmH) return true;
+    if (now < AppConfig.rainNowThresholdMmH) return false;
+
+    final need = AppConfig.rainNowSustainedSlots;
+    // Dữ liệu ngắn hơn số mốc cần → xét hết những gì có.
+    final end = need < minutely.length ? need : minutely.length;
+    for (var i = 0; i < end; i++) {
+      if (minutely[i].precipitationMmH < AppConfig.rainNowThresholdMmH) {
+        return false;
+      }
+    }
+    return true;
+  }
+
   /// Giờ được coi là ướt: có lượng mưa dự báo hoặc xác suất đủ cao.
   bool _isWetHour(HourlyForecast h) =>
       h.rainMm > _threshold || h.pop >= _popThreshold;
@@ -142,10 +227,14 @@ class AnalyzeRain {
     List<HourlyForecast> hourly,
     DateTime ref,
   ) {
-    final rainingNow = minutely.first.precipitationMmH > _threshold;
+    final rainingNow = _nowcastSaysRainingNow(minutely);
 
     if (!rainingNow) {
-      // Đang khô → tìm mốc đầu tiên có mưa trong nowcast.
+      // Đang khô, HOẶC mốc hiện tại chỉ có mưa VẾT chưa đáng gọi là mưa → nhìn
+      // về phía TRƯỚC tìm mốc mưa đầu tiên. Quét từ mốc 1 (không lấy mốc hiện
+      // tại làm onset: "dự kiến mưa ngay bây giờ" vừa vô nghĩa vừa đúng là câu
+      // gây nhầm mà người dùng phản ánh); nhờ vậy trời âm u có mưa vết bây giờ mà
+      // mưa thật đến sau 45' sẽ ra đúng "Sắp mưa lúc HH:MM".
       for (var i = 1; i < minutely.length; i++) {
         if (minutely[i].precipitationMmH > _threshold) {
           return _onsetFromMinutely(minutely, hourly, i, ref);
@@ -317,8 +406,13 @@ class AnalyzeRain {
     if (hourly.isEmpty) return const RainStatus.dry(fromMinutely: false);
 
     // Giờ đầu chỉ đại diện "bây giờ" nếu khối giờ của nó đang chứa ref.
-    final rainingNow =
-        !hourly.first.time.isAfter(ref) && _isWetHour(hourly.first);
+    //
+    // Tuyên bố "ĐANG mưa" ở đây phải dựa vào LƯỢNG MƯA dự báo, KHÔNG dùng
+    // `_isWetHour` (vốn nhận cả `pop >= 50%`): "50% khả năng mưa trong giờ này"
+    // không phải là "trời đang mưa". Đây là cùng loại lỗi với ngưỡng nowcast —
+    // nó khiến pha kẹt ở `raining` và giết mọi cảnh báo "sắp mưa".
+    final rainingNow = !hourly.first.time.isAfter(ref) &&
+        hourly.first.rainMm >= AppConfig.rainNowThresholdMmH;
 
     if (!rainingNow) {
       for (var i = 0; i < hourly.length; i++) {

@@ -173,6 +173,29 @@ class SettingsScreen extends ConsumerWidget {
                 ref.read(permissionServiceProvider).openAutoStartSettings(),
           ),
           ListTile(
+            leading: const Icon(Icons.my_location_outlined),
+            title: const Text('Cho phép vị trí "Luôn cho phép"'),
+            subtitle: const Text(
+                'BẮT BUỘC để nền tự cập nhật vị trí khi bạn di chuyển. Thiếu '
+                'quyền này, thời tiết nền sẽ báo theo chỗ bạn mở app lần cuối.'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () async {
+              final ok = await ref
+                  .read(permissionServiceProvider)
+                  .requestBackgroundLocation();
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(ok
+                        ? 'Đã cấp quyền vị trí nền.'
+                        : 'Chưa cấp. Trong Cài đặt > Quyền > Vị trí, chọn '
+                            '"Luôn cho phép".'),
+                  ),
+                );
+              }
+            },
+          ),
+          ListTile(
             leading: const Icon(Icons.receipt_long_outlined),
             title: const Text('Nhật ký hoạt động'),
             subtitle: const Text(

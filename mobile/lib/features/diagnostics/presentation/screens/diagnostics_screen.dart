@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/background/foreground_service.dart';
 import '../../../../core/diagnostics/app_log.dart';
 import '../../../../core/diagnostics/log_entry.dart';
+import '../../../../core/di/providers.dart';
 import '../../../../shared/widgets/app_error_widget.dart';
 import '../../../../shared/widgets/loading_widget.dart';
 import '../providers/diagnostics_providers.dart';
@@ -231,16 +233,57 @@ class _RuntimeCard extends ConsumerWidget {
               Text('Cấu hình & quyền',
                   style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 10),
-              _check(context, 'Foreground service',
+              _check(context, 'Theo dõi liên tục',
                   s.foregroundEnabled ? s.foregroundRunning : null,
                   offLabel: s.foregroundEnabled
-                      ? 'bật nhưng KHÔNG chạy'
+                      ? 'BỊ HỆ THỐNG DỪNG'
+                          '${s.foregroundDeadFor == null ? '' : ' — ${_dur(s.foregroundDeadFor!)} trước'}'
                       : 'đã tắt trong Cài đặt',
                   onLabel: 'đang chạy'),
+              // Chỉ app đang HIỂN THỊ mới được start foreground service (Android
+              // 12+), nên đây là chỗ hợp pháp để bật lại bằng một lần chạm — và
+              // là lý do trang này có nút thay vì để isolate nền tự xử lý.
+              if (s.foregroundEnabled && !s.foregroundRunning)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: OutlinedButton.icon(
+                    icon: const Icon(Icons.play_arrow, size: 18),
+                    label: const Text('Bật lại theo dõi liên tục'),
+                    onPressed: () async {
+                      final ok = await startWeatherForegroundService(
+                          allowRestart: false);
+                      ref.invalidate(runtimeStatusProvider);
+                      ref.invalidate(logEntriesProvider);
+                      if (!context.mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                        content: Text(ok
+                            ? 'Đã bật lại theo dõi liên tục 🐾'
+                            : 'Chưa bật được — kiểm tra quyền vị trí ở dưới.'),
+                      ));
+                    },
+                  ),
+                ),
               _check(context, 'Quyền báo thức chính xác', s.exactAlarmGranted,
                   offLabel: 'chưa cấp — thông báo có thể lệch giờ'),
               _check(context, 'Pin không giới hạn', s.batteryUnrestricted,
                   offLabel: 'chưa bật — máy có thể giết app'),
+              _check(context, 'Vị trí "Luôn cho phép"', s.backgroundLocation,
+                  offLabel: 'CHƯA cấp — nền không tự cập nhật được vị trí, '
+                      'thời tiết sẽ theo chỗ cũ khi bạn di chuyển'),
+              if (!s.backgroundLocation)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: OutlinedButton.icon(
+                    icon: const Icon(Icons.my_location, size: 18),
+                    label: const Text('Cấp quyền vị trí nền'),
+                    onPressed: () async {
+                      await ref
+                          .read(permissionServiceProvider)
+                          .requestBackgroundLocation();
+                      ref.invalidate(runtimeStatusProvider);
+                    },
+                  ),
+                ),
               _row(context, 'Chu kỳ nền', '${s.intervalMinutes} phút'),
               _row(
                 context,

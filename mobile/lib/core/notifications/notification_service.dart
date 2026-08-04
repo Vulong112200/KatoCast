@@ -24,6 +24,12 @@ class NotificationService {
   /// Channel THÔNG BÁO thông tin mới (JLPT/MBA…): high để heads-up khi có tin.
   static const String announcementsChannelId = 'announcements';
 
+  /// Channel TÌNH TRẠNG THEO DÕI: thông báo hạ tầng ("chế độ theo dõi liên tục
+  /// đã bị hệ thống dừng, mở app để bật lại"). `defaultImportance` — cần người
+  /// dùng thấy được nhưng KHÔNG heads-up/không kêu, vì đây là việc nhà của app
+  /// chứ không phải tin thời tiết gấp.
+  static const String serviceHealthChannelId = 'service_health';
+
   final FlutterLocalNotificationsPlugin _plugin =
       FlutterLocalNotificationsPlugin();
 
@@ -73,6 +79,12 @@ class NotificationService {
       'Thông báo mới',
       description: 'Tin mới về kỳ thi (JLPT), khoá học (MBA) và chủ đề bạn theo dõi.',
       importance: Importance.high,
+    ));
+    await android?.createNotificationChannel(const AndroidNotificationChannel(
+      serviceHealthChannelId,
+      'Tình trạng theo dõi',
+      description: 'Cho biết khi hệ thống dừng chế độ theo dõi thời tiết liên tục.',
+      importance: Importance.defaultImportance,
     ));
 
     _initialized = true;
@@ -136,6 +148,29 @@ class NotificationService {
       iOS: const DarwinNotificationDetails(),
     );
     await _plugin.show(id, title, body, details, payload: payload);
+  }
+
+  /// Thông báo TÌNH TRẠNG THEO DÕI trên channel [serviceHealthChannelId]:
+  /// không kêu, không heads-up, BigText để câu hướng dẫn không bị cắt.
+  Future<void> showServiceHealth({
+    required int id,
+    required String title,
+    required String body,
+  }) async {
+    await init();
+    final details = NotificationDetails(
+      android: AndroidNotificationDetails(
+        serviceHealthChannelId,
+        'Tình trạng theo dõi',
+        channelDescription:
+            'Cho biết khi hệ thống dừng chế độ theo dõi thời tiết liên tục.',
+        importance: Importance.defaultImportance,
+        priority: Priority.defaultPriority,
+        styleInformation: BigTextStyleInformation(body, contentTitle: title),
+      ),
+      iOS: const DarwinNotificationDetails(),
+    );
+    await _plugin.show(id, title, body, details);
   }
 
   /// Huỷ một thông báo / lịch theo [id].
@@ -228,6 +263,10 @@ class NotificationIds {
   static const int rainStop = 1002;
   static const int envChange = 1003;
   static const int condition = 1004;
+
+  /// Nhắc "chế độ theo dõi liên tục đã bị hệ thống dừng — mở app để bật lại".
+  /// Nằm ở 1010 để không đụng dải bản tin cũ (1005/1006) hay dải mới (1100+).
+  static const int serviceHealth = 1010;
 
   /// Bản tin thời tiết hằng ngày (mô hình CŨ 2 mốc) — chỉ giữ để hủy khi migrate
   /// sang dải động [digestBase]. Không dùng để lập lịch mới nữa.

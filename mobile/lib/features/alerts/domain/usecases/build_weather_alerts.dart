@@ -106,7 +106,16 @@ class BuildWeatherAlerts {
     }
 
     // --- 2. Tình hình thời tiết (nắng/mây/mưa/bão) — chỉ khi nhóm đổi ---
-    if (condition.category != previousCategory) {
+    //
+    // KHỞI ĐẦU MỚI (`previousCategory == null`: lần chạy đầu, hoặc trạng thái cũ
+    // đã hết hạn vì app bị ngắt hàng giờ) thì "nhóm đổi" là đương nhiên đúng —
+    // nhưng nó KHÔNG phải một sự kiện thời tiết. Nhật ký thật cho thấy hậu quả:
+    // mỗi lần app hồi sinh sau một khoảng đứt, người dùng nhận ngay một thông
+    // báo vô ích ("🌤️ Nhiều mây — Trời nhiều mây.", "☁️ Trời u ám") — 02/08
+    // 06:50, 04/08 12:33, và đó là phần lớn trong "4 thông báo/24h". Nên ở lần
+    // khởi đầu, chỉ báo khi tình hình THỰC SỰ đáng biết.
+    if (condition.category != previousCategory &&
+        (previousCategory != null || _worthAnnouncingOnFreshStart(condition))) {
       alerts.add(WeatherAlert(
         id: NotificationIds.condition,
         title: '${condition.emoji} ${condition.label}',
@@ -215,6 +224,18 @@ class BuildWeatherAlerts {
         .inMinutes;
     return notifiedLead > AppConfig.rainReminderLeadMinutes;
   }
+
+  /// Ở lần KHỞI ĐẦU (chưa có trạng thái để so), tình hình này có đáng đánh thức
+  /// người dùng không?
+  ///
+  /// Có: mưa/dông/bão/sương mù dày — thứ làm người ta đổi kế hoạch ra đường.
+  /// Không: nắng, ít mây, nhiều mây, u ám — đó là "hôm nay trời như vậy", không
+  /// phải tin. Dùng [WeatherSeverity] thay vì liệt kê nhóm để tự đúng khi thêm
+  /// nhóm mới.
+  bool _worthAnnouncingOnFreshStart(WeatherCondition condition) =>
+      condition.severity == WeatherSeverity.notice ||
+      condition.severity == WeatherSeverity.warning ||
+      condition.severity == WeatherSeverity.severe;
 
   bool _wasRaining(RainPhase? p) =>
       p == RainPhase.raining || p == RainPhase.rainStoppingSoon;

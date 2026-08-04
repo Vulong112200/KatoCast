@@ -2,6 +2,7 @@ import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/background/background_prefs.dart';
+import '../../../../core/background/service_health.dart';
 import '../../../../core/di/providers.dart';
 import '../../../../core/diagnostics/app_log.dart';
 import '../../../../core/diagnostics/log_entry.dart';
@@ -79,8 +80,17 @@ final filteredLogEntriesProvider =
 class RuntimeStatus {
   final bool foregroundEnabled;
   final bool foregroundRunning;
+
+  /// Theo dõi liên tục đã bị hệ thống dừng bao lâu (null = đang chạy / chưa rõ).
+  /// Con số này trả lời trực tiếp câu "app im lặng từ lúc nào" mà trước đây phải
+  /// tự suy từ khoảng trống trong nhật ký.
+  final Duration? foregroundDeadFor;
   final bool exactAlarmGranted;
   final bool batteryUnrestricted;
+
+  /// Quyền vị trí ở mức "Luôn cho phép". THIẾU quyền này thì nền không tự cập
+  /// nhật được vị trí → thời tiết báo theo chỗ cũ khi bạn di chuyển.
+  final bool backgroundLocation;
   final int intervalMinutes;
   final bool activeAllDay;
   final int activeStartMinutes;
@@ -89,8 +99,10 @@ class RuntimeStatus {
   const RuntimeStatus({
     required this.foregroundEnabled,
     required this.foregroundRunning,
+    required this.foregroundDeadFor,
     required this.exactAlarmGranted,
     required this.batteryUnrestricted,
+    required this.backgroundLocation,
     required this.intervalMinutes,
     required this.activeAllDay,
     required this.activeStartMinutes,
@@ -116,11 +128,20 @@ final runtimeStatusProvider =
     // Không truy vấn được → hiển thị "chưa rõ" phía UI qua giá trị false.
   }
 
+  var bgLocation = false;
+  try {
+    bgLocation = await permission.hasBackgroundLocation();
+  } catch (_) {
+    // Không truy vấn được → hiển thị như chưa cấp.
+  }
+
   return RuntimeStatus(
     foregroundEnabled: await prefs.foregroundEnabled(),
     foregroundRunning: running,
+    foregroundDeadFor: running ? null : await ForegroundServiceHealth.deadFor(),
     exactAlarmGranted: await canScheduleExactAlarms(),
     batteryUnrestricted: battery,
+    backgroundLocation: bgLocation,
     intervalMinutes: await prefs.intervalMinutes(),
     activeAllDay: await prefs.activeAllDay(),
     activeStartMinutes: await prefs.activeStartMinutes(),

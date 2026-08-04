@@ -21,6 +21,18 @@ class AlertStateStore {
   static const _kEnvNotified = 'alert_env_notified';
   static const _kChangeAt = 'alert_last_change_at';
   static const _kNotifiedAt = 'alert_last_notified_at';
+  static const _kUpdatedAt = 'alert_state_updated_at';
+
+  /// Trạng thái cũ hơn ngưỡng này thì KHÔNG còn dùng để so sánh.
+  ///
+  /// Vì sao cần: chống-spam dựa trên "so với lần trước", giả định các chu kỳ nối
+  /// tiếp nhau vài phút một. Khi tiến trình bị OEM giết hàng giờ, giả định đó
+  /// sụp. Nhật ký thật cho thấy lúc 12:24 hôm sau app vẫn so với trạng thái ghi
+  /// từ **20:57 hôm trước** — dẫn tới hai kiểu sai: hoặc im lặng vì "pha không
+  /// đổi" dù đã 15 tiếng, hoặc phát "Trời đã tạnh mưa" cho một cơn mưa từ đêm
+  /// qua. Quá ngưỡng này thì coi như KHỞI ĐẦU MỚI: cảnh báo hiện tại được phát
+  /// lại đúng theo tình hình thật.
+  static const Duration maxAge = Duration(hours: 2);
 
   Future<
       ({
@@ -29,16 +41,39 @@ class AlertStateStore {
         DateTime? changeAt,
         DateTime? notifiedAt,
         bool envNotified,
+        Duration? age,
+        bool expired,
       })> read() async {
     final prefs = await SharedPreferences.getInstance();
     // BẮT BUỘC: nạp lại từ đĩa để thấy trạng thái do isolate khác ghi.
     await prefs.reload();
+
+    final updatedAt = _dateOrNull(prefs.getInt(_kUpdatedAt));
+    final age = updatedAt == null ? null : DateTime.now().difference(updatedAt);
+    // Bản ghi từ phiên bản cũ (chưa có mốc) vẫn dùng được — không có cơ sở để
+    // kết luận nó cũ, và một lần so sánh dư an toàn hơn một lần báo trùng.
+    final expired = age != null && age > maxAge;
+
+    if (expired) {
+      return (
+        phase: null,
+        category: null,
+        changeAt: null,
+        notifiedAt: null,
+        envNotified: false,
+        age: age,
+        expired: true,
+      );
+    }
+
     return (
       phase: _enumOrNull(prefs.getInt(_kPhase), RainPhase.values),
       category: _enumOrNull(prefs.getInt(_kCategory), WeatherCategory.values),
       changeAt: _dateOrNull(prefs.getInt(_kChangeAt)),
       notifiedAt: _dateOrNull(prefs.getInt(_kNotifiedAt)),
       envNotified: prefs.getBool(_kEnvNotified) ?? false,
+      age: age,
+      expired: false,
     );
   }
 
@@ -55,6 +90,7 @@ class AlertStateStore {
     await prefs.setBool(_kEnvNotified, envNotified);
     await _setDate(prefs, _kChangeAt, changeAt);
     await _setDate(prefs, _kNotifiedAt, notifiedAt);
+    await prefs.setInt(_kUpdatedAt, DateTime.now().millisecondsSinceEpoch);
   }
 
   static DateTime? _dateOrNull(int? ms) =>

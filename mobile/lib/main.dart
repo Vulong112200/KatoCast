@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:android_alarm_manager_plus/android_alarm_manager_plus.dart';
 import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -10,8 +11,11 @@ import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 
 import 'core/app_router.dart';
+import 'core/background/background_prefs.dart';
 import 'core/background/background_triggers.dart';
 import 'core/background/cycle_lock.dart';
+import 'core/background/foreground_service.dart';
+import 'core/background/service_health.dart';
 import 'core/background/weather_check.dart';
 import 'core/diagnostics/app_log.dart';
 import 'core/diagnostics/log_entry.dart';
@@ -79,6 +83,12 @@ class _KatoCastAppState extends ConsumerState<KatoCastApp> {
         // Ghi chú: nút "Đã đọc" chạy ở isolate riêng ghi thẳng DB — main
         // isolate không tự thấy → nạp lại khi quay về app.
         ref.invalidate(notesControllerProvider);
+        // App đang hiển thị = THỜI ĐIỂM DUY NHẤT được Android 12+ cho phép bật
+        // lại foreground service. Đây là đường hồi phục chính sau khi hệ thống
+        // dừng service (Android 15+ cắt FGS sau hạn mức thời lượng, hoặc OEM
+        // giết tiến trình). Trước đây việc bật lại chỉ xảy ra ở cold start, nên
+        // vào lại app từ nền thì service vẫn chết im.
+        unawaited(_reviveForegroundServiceOnResume());
       },
     );
   }
@@ -156,6 +166,31 @@ class _KatoCastAppState extends ConsumerState<KatoCastApp> {
         appRouter.push('/notes');
       }
     } catch (_) {}
+  }
+
+  /// Bật lại theo dõi liên tục khi người dùng quay vào app, NẾU nó đã bị hệ
+  /// thống dừng. Rẻ và im lặng: service còn chạy thì chỉ là một lời gọi
+  /// `isRunningService` rồi thoát — KHÔNG restart (restart sẽ reset pha lặp và
+  /// làm FG tick trùng pha alarm).
+  Future<void> _reviveForegroundServiceOnResume() async {
+    try {
+      if (!await BackgroundPrefsStore().foregroundEnabled()) return;
+      if (await FlutterForegroundTask.isRunningService) {
+        await ForegroundServiceHealth.markAlive();
+        await ForegroundServiceHealth.clearNudgeNotification();
+        return;
+      }
+      await AppLog.w(
+        LogSource.ui,
+        LogTags.service,
+        'theo dõi liên tục đã bị hệ thống dừng → bật lại vì app đang mở',
+      );
+      await startWeatherForegroundService(allowRestart: false);
+    } catch (e, st) {
+      await AppLog.e(LogSource.ui, LogTags.service,
+          'không bật lại được theo dõi liên tục khi mở app',
+          error: e, stack: st);
+    }
   }
 
   Future<void> _promptBatteryIfNeeded() async {
