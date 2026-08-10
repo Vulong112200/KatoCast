@@ -7,6 +7,7 @@ import '../diagnostics/app_log.dart';
 import '../diagnostics/log_entry.dart';
 import '../diagnostics/log_tags.dart';
 import '../notifications/notification_service.dart';
+import '../notifications/timezone_init.dart';
 import 'background_prefs.dart';
 import 'cycle_lock.dart';
 import 'service_health.dart';
@@ -68,6 +69,11 @@ void callbackDispatcher() {
     if (task != kWeatherCheckTask) return true;
     const src = LogSource.worker;
     await AppLog.i(src, LogTags.cycle, 'WorkManager chạy');
+
+    // Isolate riêng, không chạy `main()` → tự khởi tạo múi giờ, nếu không
+    // `reassertNoteNotifications` bên dưới nổ `LateInitializationError` trên
+    // `tz.local` ở mọi lượt (xem `timezone_init.dart`).
+    await ensureTimezoneInitialized();
 
     try {
       // TOÀN BỘ phần dùng DB trong cycle lock (kể cả re-assert ghi chú) để không

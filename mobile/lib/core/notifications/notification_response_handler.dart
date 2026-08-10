@@ -1,14 +1,12 @@
 import 'package:flutter/widgets.dart' show WidgetsFlutterBinding;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:flutter_timezone/flutter_timezone.dart';
-import 'package:timezone/data/latest_all.dart' as tzdata;
-import 'package:timezone/timezone.dart' as tz;
 
 import '../../features/notes/data/note_local_datasource.dart';
 import '../../features/notes/data/note_notification_service.dart';
 import '../app_router.dart';
 import '../database/app_database.dart';
 import 'notification_service.dart';
+import 'timezone_init.dart';
 
 /// Chạy ở MAIN isolate khi user chạm vào THÂN notification (app đang chạy /
 /// background). Payload của ghi chú → mở màn Ghi chú.
@@ -42,13 +40,10 @@ Future<void> onNotificationActionBackground(NotificationResponse resp) async {
 
   try {
     // Isolate này không chạy main() → tự init binding (plugin channel) +
-    // timezone (thiếu tz.local sẽ là UTC → zonedSchedule re-sync bắn sai giờ).
+    // timezone (thiếu tz.local sẽ ném LateInitializationError; nếu là UTC thì
+    // zonedSchedule re-sync bắn sai giờ). Xem `timezone_init.dart`.
     WidgetsFlutterBinding.ensureInitialized();
-    tzdata.initializeTimeZones();
-    try {
-      final localTz = await FlutterTimezone.getLocalTimezone();
-      tz.setLocalLocation(tz.getLocation(localTz));
-    } catch (_) {}
+    await ensureTimezoneInitialized();
 
     final db = AppDatabase();
     try {

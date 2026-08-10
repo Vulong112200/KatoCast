@@ -8,6 +8,7 @@ import '../diagnostics/app_log.dart';
 import '../diagnostics/log_entry.dart';
 import '../diagnostics/log_tags.dart';
 import '../notifications/notification_service.dart';
+import '../notifications/timezone_init.dart';
 import 'background_prefs.dart';
 import 'cycle_lock.dart';
 import 'service_health.dart';
@@ -58,6 +59,12 @@ class _WeatherTaskHandler extends TaskHandler {
   Future<void> _tick() async {
     const src = LogSource.fg;
     await AppLog.i(src, LogTags.cycle, 'tick foreground service');
+
+    // Isolate này KHÔNG chạy `main()` → phải tự khởi tạo múi giờ. Thiếu bước
+    // này, `reassertNoteNotifications` bên dưới ném `LateInitializationError`
+    // trên `tz.local` ở MỌI tick (nhật ký thật: 74 lỗi/24h) nên lịch nhắc ghi
+    // chú không bao giờ được dựng lại từ nền. Idempotent, không ném lỗi.
+    await ensureTimezoneInitialized();
 
     final withinWindow = await isWithinActiveHours(DateTime.now());
     if (!withinWindow) {

@@ -366,11 +366,12 @@ void main() {
       expect(r.alerts, isEmpty);
     });
 
-    test('MƯA NHỎ ⇒ VẪN báo (đây là thứ người dùng cần biết ngay)', () {
+    test('MƯA NHỎ CÓ lượng mưa đo được ⇒ VẪN báo (thứ cần biết ngay)', () {
       final r = sut.call(
         rain: const RainStatus.dry(),
         condition: WeatherCondition.classify(500),
         env: EnvChange.none,
+        observedRain1hMm: 1.2,
         now: _now,
       );
       expect(r.alerts.single.title, contains('Mưa nhỏ'));
@@ -397,6 +398,62 @@ void main() {
         now: _now,
       );
       expect(r.alerts.single.title, contains('u ám'));
+    });
+  });
+
+  group('KHÔNG nói ngược với phân tích mưa (mã mưa nhẹ/vừa cần xác thực)', () {
+    test('ca thật 06/08 09:38: pha dry + mã 500 + rain1h 0.16 ⇒ KHÔNG báo', () {
+      // Nhật ký thật, CÙNG một chu kỳ: `pha: dry · tình hình: Mưa nhỏ · nowcast
+      // bây giờ: 0.00 mm/h · mưa 1h quan trắc: 0.16 mm · mã điều kiện OWM: 500`
+      // rồi `ĐÃ BÁO: 🌦️ Mưa nhỏ — "Có mưa nhỏ. Mang theo ô cho chắc chắn."`
+      // App tự nói ngược với chính mình, chỉ vì mã điều kiện của OWM.
+      final r = sut.call(
+        rain: const RainStatus.dry(),
+        condition: WeatherCondition.classify(500),
+        env: EnvChange.none,
+        previousPhase: RainPhase.dry,
+        previousCategory: WeatherCategory.cloudy,
+        observedRain1hMm: 0.16,
+        now: _now,
+      );
+      expect(r.alerts, isEmpty);
+      // GIỮ nhóm cũ: khi có bằng chứng thật, "nhóm đổi" vẫn còn hiệu lực để báo.
+      expect(r.newCategory, WeatherCategory.cloudy);
+    });
+
+    test('cùng ca đó nhưng phân tích mưa nói SẮP MƯA ⇒ được báo', () {
+      final r = sut.call(
+        rain: RainStatus(
+          phase: RainPhase.rainStartingSoon,
+          changeAt: _now.add(const Duration(minutes: 20)),
+          minutesUntilChange: 20,
+          fromMinutely: true,
+        ),
+        condition: WeatherCondition.classify(500),
+        env: EnvChange.none,
+        previousPhase: RainPhase.rainStartingSoon,
+        previousCategory: WeatherCategory.cloudy,
+        previousChangeAt: _now.add(const Duration(minutes: 20)),
+        observedRain1hMm: 0.16,
+        now: _now,
+      );
+      expect(
+        r.alerts.map((a) => a.title),
+        contains(contains('Mưa nhỏ')),
+      );
+      expect(r.newCategory, WeatherCategory.lightRain);
+    });
+
+    test('MƯA TO khi trời khô ⇒ VẪN báo (nhóm nguy hiểm không bị chặn)', () {
+      final r = sut.call(
+        rain: const RainStatus.dry(),
+        condition: WeatherCondition.classify(502),
+        env: EnvChange.none,
+        previousPhase: RainPhase.dry,
+        previousCategory: WeatherCategory.cloudy,
+        now: _now,
+      );
+      expect(r.alerts.single.title, contains('Mưa to'));
     });
   });
 }

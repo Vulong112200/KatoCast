@@ -10,6 +10,7 @@ import '../diagnostics/app_log.dart';
 import '../diagnostics/log_entry.dart';
 import '../diagnostics/log_tags.dart';
 import '../notifications/notification_service.dart';
+import '../notifications/timezone_init.dart';
 import 'cycle_lock.dart';
 import 'background_prefs.dart';
 import 'service_health.dart';
@@ -154,6 +155,11 @@ Future<void> _run() async {
   const src = LogSource.alarm;
   await AppLog.i(src, LogTags.cycle, 'alarm nổ — bắt đầu chu kỳ',
       data: {'id': kWeatherAlarmId});
+
+  // Isolate alarm không chạy `main()` → tự khởi tạo múi giờ, nếu không
+  // `reassertNoteNotifications` bên dưới nổ `LateInitializationError` trên
+  // `tz.local` ở mọi chu kỳ (xem `timezone_init.dart`).
+  await ensureTimezoneInitialized();
 
   final withinWindow = await isWithinActiveHours(DateTime.now());
 

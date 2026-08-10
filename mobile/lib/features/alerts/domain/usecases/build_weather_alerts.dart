@@ -40,6 +40,7 @@ class BuildWeatherAlerts {
     DateTime? previousChangeAt,
     DateTime? previousNotifiedAt,
     bool envAlreadyNotified = false,
+    double observedRain1hMm = 0,
     DateTime? now,
   }) {
     final ref = now ?? DateTime.now();
@@ -114,7 +115,13 @@ class BuildWeatherAlerts {
     // báo vô ích ("🌤️ Nhiều mây — Trời nhiều mây.", "☁️ Trời u ám") — 02/08
     // 06:50, 04/08 12:33, và đó là phần lớn trong "4 thông báo/24h". Nên ở lần
     // khởi đầu, chỉ báo khi tình hình THỰC SỰ đáng biết.
+    // Mã mưa NHẸ/VỪA của OWM cần được xác nhận trước khi đem đi báo — xem
+    // [_rainClaimUnsupported]. Không xác nhận được thì bỏ qua lượt này và GIỮ
+    // `previousCategory` để lần sau (khi có bằng chứng) vẫn còn "nhóm đổi" mà báo.
+    final unsupportedRainClaim =
+        _rainClaimUnsupported(condition, rain, observedRain1hMm);
     if (condition.category != previousCategory &&
+        !unsupportedRainClaim &&
         (previousCategory != null || _worthAnnouncingOnFreshStart(condition))) {
       alerts.add(WeatherAlert(
         id: NotificationIds.condition,
@@ -139,7 +146,11 @@ class BuildWeatherAlerts {
     return AlertResult(
       alerts: alerts,
       newPhase: rain.phase,
-      newCategory: condition.category,
+      // Tình hình mưa CHƯA được xác nhận thì không chốt vào trạng thái: giữ nhóm
+      // cũ để khi có bằng chứng thật, "nhóm đổi" vẫn còn hiệu lực và báo được.
+      newCategory: unsupportedRainClaim
+          ? (previousCategory ?? condition.category)
+          : condition.category,
       // Chỉ chốt mốc mới khi pha đổi hoặc đã phát thông báo mưa; nếu không,
       // GIỮ mốc đã báo lần trước để lần sau còn so lệch được (chống drift).
       newChangeAt:
@@ -232,6 +243,38 @@ class BuildWeatherAlerts {
   /// Không: nắng, ít mây, nhiều mây, u ám — đó là "hôm nay trời như vậy", không
   /// phải tin. Dùng [WeatherSeverity] thay vì liệt kê nhóm để tự đúng khi thêm
   /// nhóm mới.
+  /// Thông báo "tình hình" đang định nói là TRỜI MƯA, nhưng KHÔNG có gì chứng
+  /// thực điều đó?
+  ///
+  /// ⚠️ Ca thật trong nhật ký 06/08/2026 09:38:22 — cùng một chu kỳ ghi:
+  /// `pha: dry · tình hình: Mưa nhỏ · nowcast bây giờ: 0.00 mm/h · mưa 1h quan
+  /// trắc: 0.16 mm · mã điều kiện OWM: 500`, rồi ngay sau đó
+  /// `ĐÃ BÁO: 🌦️ Mưa nhỏ — "Có mưa nhỏ. Mang theo ô cho chắc chắn."`
+  /// Tức app tự nói ngược với chính mình: phân tích mưa kết luận KHÔNG mưa, mà
+  /// thông báo lại khẳng định đang có mưa — chỉ vì OWM gán mã 500 và 0.16 mm tích
+  /// lũy của cả một giờ (mức gần như không cảm nhận được). `WeatherCondition`
+  /// phân loại THUẦN theo mã điều kiện nên nó không biết chuyện đó.
+  ///
+  /// Điều kiện xác thực (chỉ cần MỘT trong hai) — cố ý dễ, để không bịt mất tin
+  /// thật: phân tích mưa đồng ý là có mưa/sắp mưa, HOẶC có lượng mưa đo được từ
+  /// [AppConfig.rainObsMm1hThreshold] trở lên.
+  ///
+  /// Chỉ áp cho nhóm mưa NHẸ/VỪA. Mưa to/dông/bão/lốc luôn được báo: sai một lần
+  /// còn hơn im lặng trước thứ có thể gây nguy hiểm.
+  bool _rainClaimUnsupported(
+    WeatherCondition condition,
+    RainStatus rain,
+    double observedRain1hMm,
+  ) {
+    final softRainCategory = condition.category == WeatherCategory.drizzle ||
+        condition.category == WeatherCategory.lightRain ||
+        condition.category == WeatherCategory.moderateRain;
+    if (!softRainCategory) return false;
+    final corroborated = rain.phase != RainPhase.dry ||
+        observedRain1hMm >= AppConfig.rainObsMm1hThreshold;
+    return !corroborated;
+  }
+
   bool _worthAnnouncingOnFreshStart(WeatherCondition condition) =>
       condition.severity == WeatherSeverity.notice ||
       condition.severity == WeatherSeverity.warning ||

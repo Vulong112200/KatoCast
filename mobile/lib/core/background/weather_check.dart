@@ -245,6 +245,9 @@ Future<void> _maybeAlert(WeatherData data, String source) async {
     previousChangeAt: prev.changeAt,
     previousNotifiedAt: prev.notifiedAt,
     envAlreadyNotified: prev.envNotified,
+    // Lượng mưa quan trắc THẬT: dùng để không phát thông báo "đang có mưa nhỏ"
+    // chỉ vì mã điều kiện OWM, khi phân tích mưa đã kết luận trời khô.
+    observedRain1hMm: data.current.rain1h,
   );
 
   if (out.alerts.isEmpty) {

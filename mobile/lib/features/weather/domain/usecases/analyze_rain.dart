@@ -89,13 +89,15 @@ class AnalyzeRain {
 
   /// Quan trắc hiện tại có cho thấy đang mưa không.
   ///
-  /// ⚠️ KHÔNG tin `conditionId` một mình cho các mã YẾU. OpenWeatherMap gán rất
-  /// thoáng mã 500 ("light rain") và nhóm 3xx ("drizzle") cho trời chỉ âm u/ẩm
-  /// cao — nhật ký thật cho thấy app tuyên bố "Trời đang mưa" trong khi ngoài
-  /// trời chưa mưa. Nên:
-  /// - mã MẠNH và không thể nhầm (dông 2xx, mưa vừa/to 501+) → tin ngay;
-  /// - mã YẾU (500 light rain, 3xx drizzle) → chỉ tin khi có **bằng chứng lượng
-  ///   mưa thật** (`rain1h`) kèm theo.
+  /// ⚠️ KHÔNG tin `conditionId` một mình cho các mã YẾU/VỪA. OpenWeatherMap gán
+  /// rất thoáng mã 500 ("light rain") và nhóm 3xx ("drizzle") cho trời chỉ âm u/
+  /// ẩm cao, và GIỮ NGUYÊN mã mưa gần một tiếng sau khi cơn mưa đã tạnh — nhật ký
+  /// thật cho thấy app tuyên bố "Trời đang mưa" trong khi ngoài trời không mưa.
+  /// Nên:
+  /// - mã KHÔNG THỂ NHẦM (dông 2xx, mưa TO trở lên 502+) → tin ngay;
+  /// - mã còn lại của nhóm mưa/mưa phùn (3xx, 500 light, **501 moderate**) → chỉ
+  ///   tin khi có **bằng chứng lượng mưa thật** (`rain1h`) và nowcast không phủ
+  ///   định sạch cửa sổ.
   /// Quan trắc quá cũ so với [ref] thì bỏ qua (không đại diện "bây giờ").
   ///
   /// [nowcastSawNoRainAtAll] = nowcast có dữ liệu và KHÔNG thấy mưa ở bất kỳ
@@ -114,9 +116,21 @@ class AnalyzeRain {
   ///
   /// Van này cố ý HẸP để không làm sống lại lỗi ngược (nowcast VN hay bỏ sót
   /// mưa → app im lặng khi trời đã mưa thật). Nó KHÔNG chặn:
-  /// - mã MẠNH (dông/mưa vừa trở lên): nowcast sai thì nowcast chịu;
+  /// - mã KHÔNG THỂ NHẦM (dông 2xx, mưa TO trở lên 502+): nowcast sai thì nowcast
+  ///   chịu;
   /// - lượng mưa quan trắc LỚN ([AppConfig.rainObsHeavyMm1hThreshold]);
   /// - khi nowcast thấy mưa sắp tới (nowcast chỉ TRỄ, không phải phủ định).
+  ///
+  /// ⚠️ **501 ("mưa vừa") ĐÃ BỊ ĐƯA RA khỏi nhóm "tin ngay"** (bản trước gộp
+  /// `501+` vào đó). Nhật ký thật 06/08/2026 cho thấy mã 501 lag y như 500:
+  /// 12:38 → 13:54 liên tục `nowcast bây giờ 0.00 mm/h · mưa 1h quan trắc
+  /// 1.55→1.14 mm · mã OWM 501`, app báo "Trời đang mưa · còn mưa 100%" rồi KẸT
+  /// pha `raining` suốt 1 giờ 16 phút ("KHÔNG báo — pha trước raining, pha nay
+  /// raining" ở cả 3 lớp nền). Đó đúng là hậu quả nặng nhất mà cái van này được
+  /// tạo ra để chặn, chỉ khác con số mã. Lý do 501 an toàn khi bỏ ra: mưa vừa
+  /// THẬT (2.5–7.6 mm/h) thì `rain1h` vượt 2 mm rất nhanh và lọt qua van bằng
+  /// [AppConfig.rainObsHeavyMm1hThreshold]; còn 501 kèm `rain1h` nhỏ dần đúng là
+  /// dấu vết của cơn mưa VỪA TẠNH.
   bool _obsIndicatesRain(
     CurrentWeather current,
     DateTime ref, {
@@ -128,25 +142,27 @@ class AnalyzeRain {
     }
 
     final id = current.conditionId;
-    // Dông (2xx) hoặc mưa vừa trở lên (501+) — mã không thể nhầm với trời âm u.
-    final strongRainCode =
-        id != null && ((id >= 200 && id < 300) || (id > 500 && id < 600));
-    if (strongRainCode) return true;
+    // Dông (2xx) hoặc mưa TO trở lên (502+) — mã không thể nhầm với trời âm u,
+    // cũng không thể là "dư" của một cơn mưa nhỏ vừa tạnh.
+    final unmistakableRainCode =
+        id != null && ((id >= 200 && id < 300) || (id >= 502 && id < 600));
+    if (unmistakableRainCode) return true;
 
     // Mưa quan trắc RẤT nhiều → đang mưa thật, không thể là dư của cơn đã tạnh.
     if (current.rain1h >= AppConfig.rainObsHeavyMm1hThreshold) return true;
 
-    // Từ đây bằng chứng chỉ ở mức YẾU (mã 500/3xx, hoặc chỉ có `rain1h` vừa
-    // phải). Nowcast phủ định sạch cả cửa sổ → tin nowcast: mưa đã tạnh.
+    // Từ đây bằng chứng chỉ ở mức YẾU/VỪA (mã 3xx/500/501, hoặc chỉ có `rain1h`
+    // vừa phải). Nowcast phủ định sạch cả cửa sổ → tin nowcast: mưa đã tạnh.
     if (nowcastSawNoRainAtAll) return false;
 
     // Lượng mưa quan trắc đủ lớn → coi là đang mưa, bất kể mã điều kiện.
     if (current.rain1h >= AppConfig.rainObsMm1hThreshold) return true;
 
     if (id == null) return false;
-    // Mã YẾU: 500 (light rain) / 3xx (drizzle) → cần có lượng mưa đo được.
-    final weakRainCode = id == 500 || (id >= 300 && id < 400);
-    return weakRainCode && current.rain1h > 0;
+    // Mã 3xx (drizzle) / 500 (light) / 501 (moderate) → cần lượng mưa đo được.
+    final rainCodeNeedingProof =
+        (id >= 300 && id < 400) || id == 500 || id == 501;
+    return rainCodeNeedingProof && current.rain1h > 0;
   }
 
   /// Giữ các mốc minutely từ slot hiện tại trở đi. Trả rỗng nếu toàn bộ chuỗi

@@ -623,11 +623,56 @@ void main() {
       expect(status.phase, isNot(RainPhase.raining));
     });
 
-    test('mã MẠNH 501 (mưa vừa) vẫn tin ngay dù rain1h = 0', () {
+    test(
+        'ca thật 06/08: 501 + rain1h 1.55 + nowcast 0.00 sạch cửa sổ ⇒ '
+        'KHÔNG raining (mưa vừa TẠNH)', () {
+      // ⚠️ Test này thay cho một test cũ khẳng định điều ngược lại ("mã MẠNH 501
+      // vẫn tin ngay dù rain1h = 0"). Nhật ký thật 06/08/2026 chứng minh 501 lag
+      // đúng như 500: 12:38 → 13:54 liên tục `nowcast bây giờ 0.00 mm/h · mưa 1h
+      // quan trắc 1.55→1.14 mm · mã OWM 501`, app báo "Trời đang mưa · còn mưa
+      // 100%" rồi KẸT pha `raining` suốt 1h16 (cả 3 lớp nền chỉ ghi "KHÔNG báo —
+      // pha trước raining, pha nay raining") nên không còn cảnh báo nào phát ra.
       final status = sut.call(
         _data(
           minutely: List<double>.filled(60, 0.0),
           conditionId: 501,
+          rain1h: 1.55,
+        ),
+        now: base,
+      );
+      expect(status.phase, isNot(RainPhase.raining));
+      expect(status.probabilityPct, isNot(100));
+    });
+
+    test('501 + rain1h LỚN (≥2mm) ⇒ vẫn tin là đang mưa dù nowcast khô', () {
+      // Mưa vừa THẬT (2.5–7.6 mm/h) thì rain1h vượt 2 mm rất nhanh → van vẫn cho
+      // qua bằng ngưỡng lượng mưa, không cần tin mã điều kiện.
+      final status = sut.call(
+        _data(
+          minutely: List<double>.filled(60, 0.0),
+          conditionId: 501,
+          rain1h: 2.4,
+        ),
+        now: base,
+      );
+      expect(status.phase, RainPhase.raining);
+    });
+
+    test('501 + rain1h nhỏ nhưng KHÔNG có nowcast phủ định ⇒ tin quan trắc', () {
+      final status = sut.call(
+        _data(hourly: [_h(12, 0.2, 0)], conditionId: 501, rain1h: 0.2),
+        now: base,
+      );
+      expect(status.phase, RainPhase.raining);
+    });
+
+    test('mưa TO 502 vẫn tin ngay dù nowcast phủ định sạch cửa sổ', () {
+      // Van cố ý HẸP: mã mưa to trở lên không thể là "dư của cơn mưa nhỏ vừa
+      // tạnh", và bỏ sót mưa to thì thiệt hại lớn hơn hẳn một lần báo sai.
+      final status = sut.call(
+        _data(
+          minutely: List<double>.filled(60, 0.0),
+          conditionId: 502,
           rain1h: 0,
         ),
         now: base,

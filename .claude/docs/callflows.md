@@ -45,6 +45,38 @@ ref.invalidate(provider) → UI rebuild
 
 ## Flows thực tế
 
+### 0. Khởi động app & CHUỖI XIN QUYỀN (thứ tự có chủ ý — `main._bootstrap`)
+```
+main()  ──▶ ensureTimezoneInitialized()   # nạp tzdata + set tz.local + LƯU tên múi giờ vào prefs
+        ──▶ AndroidAlarmManager.initialize()
+        ──▶ runApp(ProviderScope)
+              │
+   frame ĐẦU: WeatherScreen.build → watch weatherProvider → currentLocationProvider
+              │  → ensureLocationPermission() → [vào PermissionGate, xếp sau (1)]
+              ▼
+   postFrame: _bootstrap()
+     (1) requestNotificationPermission()   ── PermissionGate ──▶ hộp thoại POST_NOTIFICATIONS
+         │  (gọi TRƯỚC notif.init() để chiếm chỗ ĐẦU hàng đợi)
+         └─ await notificationService.init()          [bọc try: lỗi ở đây không đứt chuỗi]
+     (2) getLaunchDetails() → payload note ⇒ appRouter.push('/notes')
+     (3) ensureLocationPermission()        ── PermissionGate ──▶ hộp thoại ACCESS_FINE_LOCATION
+         │   (lượt của provider ở frame đầu đã xếp trước; lượt nào chạy trước thì
+         │    lượt sau KIỂM TRA LẠI thấy đã cấp ⇒ KHÔNG hiện hộp thoại thứ hai)
+         ▼   [từ chối → log warn, app vẫn chạy; WeatherScreen hiện PermissionDeniedWidget]
+     (4) applyBackgroundTriggers()   # CHỈ ĐẾN ĐÂY mới bật FG service (kiểu `location`
+         │                           # đòi quyền vị trí runtime — xem bug 11/20)
+     (5) unawaited: scheduleDigests · scheduleAnnouncementCheck · reassertNoteNotifications
+     (6) unawaited: CycleLock.runGuarded(ui, runWeatherCheck)
+     (7) requestExactAlarmPermission()   # isGranted trước ⇒ Android 13+ KHÔNG mở màn cài đặt
+     (8) _promptBatteryIfNeeded()        # throttle 7 ngày
+     (9) _promptAutostartOnboardingIfNeeded()   # dialog 1 lần
+```
+⚠️ **Vì sao phải xếp hàng:** Android chỉ cho MỘT hộp thoại quyền mỗi lúc; lời gọi thứ hai bị thả im
+lặng và KHÔNG có callback ⇒ future treo vĩnh viễn. Trước fix, (1) và lượt xin vị trí của provider chạy
+song song bằng hai plugin khác nhau nên một trong hai bị thả → `currentLocationProvider` kẹt `loading`
+→ **app trắng màn, xoay vô hạn, không hiện xin quyền vị trí** (phải vuốt tắt mở lại lần 2). Xem
+`core/permissions/permission_gate.dart` và bug (19)/(20) trong `features.md`.
+
 ### 1. Hiển thị thời tiết (foreground)
 ```
 WeatherScreen (ConsumerWidget)
@@ -97,6 +129,10 @@ MapScreen → flutter_map (tile OSM + lớp mưa OWM) center theo currentLocatio
 
 ### 2. Thông báo thông minh (background → LÕI runWeatherCheck)
 ```
+MỌI entrypoint nền (FG tick · alarm callback · WorkManager) chạy `ensureTimezoneInitialized()` ĐẦU TIÊN
+— isolate nền không chạy main() nên thiếu bước này `reassertNoteNotifications` ném LateInitializationError
+trên `tz.local` (nhật ký thật: 74 lỗi/24h, lịch nhắc ghi chú không bao giờ được dựng lại). Xem bug (18).
+
 applyBackgroundTriggers() [main._bootstrap + backgroundSettingsProvider khi đổi cài đặt]:
    ⚠️ CHỈ chạy ở isolate UI. start FGS từ isolate NỀN là bất hợp pháp trên Android 12+ và
      làm SẬP TIẾN TRÌNH (plugin gọi startForeground không có try/catch) → xem "3 ĐƯỜNG BẬT LẠI".
