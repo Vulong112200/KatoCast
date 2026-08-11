@@ -84,7 +84,9 @@ class BuildDailyDigest {
 
   String? _rainHint(RainStatus rain) {
     final pct = rain.probabilityPct;
-    final chance = pct != null ? ' (khả năng ~$pct%)' : '';
+    // pct <= 0 → bỏ mệnh đề: "(khả năng ~0%)" cạnh một câu báo mưa là tự mâu
+    // thuẫn (xem `_chanceSuffix` ở BuildWeatherAlerts, ca thật 11/08/2026).
+    final chance = (pct != null && pct > 0) ? ' (khả năng ~$pct%)' : '';
     // Giờ HH:MM lấy từ timestamp dự báo (changeAt), không cộng phút vào
     // DateTime.now() — tránh lệch giờ khi dữ liệu là cache cũ.
     final at = rain.changeAt;

@@ -350,6 +350,12 @@ class BuildWeatherAlerts {
   /// Hậu tố " Khả năng mưa ~P%." nếu có dữ liệu xác suất; rỗng nếu không.
   String _chanceSuffix(int? pct, {bool raining = false}) {
     if (pct == null) return '';
+    // ⚠️ "Khả năng mưa khoảng 0%" đứng ngay cạnh một cảnh báo MƯA là câu tự mâu
+    // thuẫn — đã lên máy người dùng 11/08/2026 ("Dự kiến mưa lúc 18:30 … Khả
+    // năng mưa khoảng 0%"). Nguồn gốc số 0 đã sửa ở `AnalyzeRain._probabilityPct`
+    // (nay lấy MAX với pop nowcast), nhưng vẫn chặn ở đây: thà KHÔNG nói gì về
+    // xác suất còn hơn nói một con số phủ định chính thông báo đang phát.
+    if (pct <= 0) return '';
     return raining
         ? ' Khả năng còn mưa khoảng $pct%.'
         : ' Khả năng mưa khoảng $pct%.';

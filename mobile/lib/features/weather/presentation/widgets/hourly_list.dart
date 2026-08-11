@@ -7,14 +7,14 @@ import '../../domain/entities/weather_condition.dart';
 /// Danh sách dự báo theo giờ (cuộn ngang): tình hình (emoji) + nhiệt độ + xác
 /// suất mưa + lượng mưa dự báo.
 ///
-/// Xác suất (%) cho các giờ GẦN được lấy từ **nowcast 15'** (nhạy hơn với mưa
-/// sắp tới) nếu có; các giờ xa dùng `hourly.pop`. Kèm ghi chú nhắc pop là ước
-/// tính của OpenWeatherMap — mưa dông chiều vùng nhiệt đới có thể không được
-/// phản ánh đầy đủ.
+/// Xác suất (%) là giá trị **LỚN HƠN** giữa **nowcast 15'** (nhạy hơn với mưa
+/// sắp tới) và `hourly.pop`; giờ xa ngoài tầm nowcast chỉ còn `hourly.pop`.
+/// Xem [effectiveHourPop]. Kèm ghi chú nhắc pop là ước tính của OpenWeatherMap —
+/// mưa dông chiều vùng nhiệt đới có thể không được phản ánh đầy đủ.
 class HourlyList extends StatelessWidget {
   final List<HourlyForecast> hourly;
 
-  /// Nowcast 15' (để ưu tiên pop nhạy hơn cho giờ gần). Có thể rỗng.
+  /// Nowcast 15' (nguồn pop nhạy hơn cho giờ gần). Có thể rỗng.
   final List<MinutelyForecast> minutely;
 
   const HourlyList({
@@ -59,7 +59,7 @@ class HourlyList extends StatelessWidget {
 
   Widget _hourCard(BuildContext context, HourlyForecast h) {
     final t = Theme.of(context).textTheme;
-    final popPct = (_effectivePop(h) * 100).round();
+    final popPct = (effectiveHourPop(h, minutely) * 100).round();
     final emoji =
         WeatherCondition.classify(h.conditionId, rainMmH: h.rainMm).emoji;
     return Container(
@@ -97,18 +97,30 @@ class HourlyList extends StatelessWidget {
       ),
     );
   }
+}
 
-  /// pop hiển thị: ưu tiên nowcast 15' (max các mốc trong khối giờ) nếu có, ngược
-  /// lại dùng hourly.pop. Nowcast nhạy hơn với mưa sắp tới nên giờ gần chính xác
-  /// hơn; giờ xa (ngoài tầm nowcast ~12h) tự động rơi về hourly.pop.
-  double _effectivePop(HourlyForecast h) {
-    final blockEnd = h.time.add(const Duration(hours: 1));
-    double? maxNow;
-    for (final m in minutely) {
-      if (!m.time.isBefore(h.time) && m.time.isBefore(blockEnd)) {
-        maxNow = maxNow == null ? m.pop : (m.pop > maxNow ? m.pop : maxNow);
-      }
+/// pop hiển thị: **giá trị LỚN HƠN** giữa nowcast 15' (max các mốc trong khối
+/// giờ) và `hourly.pop`. Giờ xa (ngoài tầm nowcast ~12h) tự động chỉ còn
+/// `hourly.pop`.
+///
+/// ⚠️ Bản trước ƯU TIÊN nowcast, tức nowcast có dữ liệu là **thay thế hẳn**
+/// `hourly.pop`. Lý do ban đầu đúng (nowcast nhạy hơn với mưa sắp tới, quan sát
+/// thực tế 11/08/2026: giờ 18:00 hourly báo 0% trong khi nowcast báo 17%),
+/// nhưng nó bất đối xứng: chiều ngược lại — nowcast thấp hơn hourly — app sẽ
+/// hiện số THẤP HƠN chính dự báo của OWM, tức tự bịt mắt mình đúng cái chiều đã
+/// gây ra vụ 10/08 (app im lặng trong khi trời đang mưa).
+///
+/// Lấy `max` giữ nguyên ích lợi của nowcast mà bỏ được rủi ro đó: app không bao
+/// giờ hiện khả năng mưa thấp hơn con số OWM đưa ra ở bất kỳ nguồn nào.
+/// (Đo thực tế Manila + TP.HCM ngày 11/08: 0 giờ nào nowcast < hourly, nên đây
+/// là gia cố phòng xa chứ không sửa một lỗi đang xảy ra.)
+double effectiveHourPop(HourlyForecast h, List<MinutelyForecast> minutely) {
+  final blockEnd = h.time.add(const Duration(hours: 1));
+  var best = h.pop;
+  for (final m in minutely) {
+    if (!m.time.isBefore(h.time) && m.time.isBefore(blockEnd)) {
+      if (m.pop > best) best = m.pop;
     }
-    return maxNow ?? h.pop;
   }
+  return best;
 }

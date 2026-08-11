@@ -80,7 +80,10 @@ class BuildAdvisories {
       case RainPhase.rainStartingSoon:
         final at = rain.changeAt;
         final pct = rain.probabilityPct;
-        final chance = pct != null ? ', khả năng ~$pct%' : '';
+        // pct <= 0 → BỎ hẳn mệnh đề: "Sắp mưa lúc 18:30, khả năng ~0%" là câu tự
+        // phủ định chính nó (đã lên máy người dùng 11/08/2026, cả trên thẻ
+        // "Kato mách bạn" lẫn banner). Xem `_chanceSuffix` ở BuildWeatherAlerts.
+        final chance = (pct != null && pct > 0) ? ', khả năng ~$pct%' : '';
         return at != null
             ? 'Sắp mưa lúc ${_clock(at)}$chance$until — mang theo áo mưa.'
             : 'Sắp có mưa — mang theo áo mưa.';

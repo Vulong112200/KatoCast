@@ -771,4 +771,77 @@ void main() {
       expect(status.isRainingNow, isTrue);
     });
   });
+
+  group('AnalyzeRain - ca thật 11/08/2026 (ảnh chụp màn hình người dùng)', () {
+    // Hai lỗi CÙNG một thông báo, chụp lúc 13:12 và 14:44:
+    //   "Sắp mưa … Dự kiến mưa lúc 18:30 (khoảng 317 phút tới) … Khả năng mưa
+    //    khoảng 0%."
+    // (1) 317' (và 225' ở ảnh sau) vượt xa `rainSoonHorizonMinutes` = 120'.
+    // (2) báo mưa mà xác suất 0% — câu tự phủ định chính nó.
+    // Cả hai lộ ra SAU khi sửa lỗi parse nowcast: trước đó chuỗi nowcast bị ghim
+    // cứng 0.0 nên nhánh onset-từ-nowcast KHÔNG BAO GIỜ chạy.
+
+    test('onset nowcast XA hơn tầm nhìn 120 phút ⇒ KHÔNG báo "sắp mưa"', () {
+      // 21 mốc × 15' = mưa bắt đầu ở phút 315 (~5h15) — đúng ca 13:12 → 18:30.
+      final minutely = List<double>.filled(40, 0.0);
+      for (var i = 21; i < 30; i++) {
+        minutely[i] = 1.0; // mã 500 → 1.0 mm/h
+      }
+      final status = sut.call(
+        _data(minutely: minutely, stepMinutes: 15),
+        now: base,
+      );
+      expect(status.phase, RainPhase.dry,
+          reason: 'mưa còn cách 5 tiếng thì chưa phải "sắp mưa"');
+    });
+
+    test('onset nowcast TRONG tầm nhìn ⇒ vẫn báo bình thường', () {
+      // Không được siết tay: mốc thứ 4 (60') phải còn báo.
+      final minutely = List<double>.filled(40, 0.0);
+      for (var i = 4; i < 12; i++) {
+        minutely[i] = 1.0;
+      }
+      final status = sut.call(
+        _data(minutely: minutely, stepMinutes: 15),
+        now: base,
+      );
+      expect(status.phase, RainPhase.rainStartingSoon);
+      expect(status.changeAt, base.add(const Duration(minutes: 60)));
+    });
+
+    test('xác suất lấy MAX với pop nowcast ⇒ không còn ra 0%', () {
+      // Ca thật: hourly cho giờ đó báo pop = 0 trong khi nowcast trong chính giờ
+      // đó lên tới 0.17 — cảnh báo do nowcast sinh ra mà % lại lấy từ hourly.
+      final minutely = <MinutelyForecast>[
+        for (var i = 0; i < 12; i++)
+          MinutelyForecast(
+            time: base.add(Duration(minutes: 15 * i)),
+            precipitationMmH: i >= 4 ? 1.0 : 0.0,
+            pop: i >= 4 ? 0.17 : 0.0,
+          ),
+      ];
+      final data = WeatherData(
+        current: CurrentWeather(
+          time: base,
+          tempC: 32,
+          feelsLikeC: 39,
+          humidity: 66,
+          uvi: 4,
+          clouds: 100,
+          windSpeed: 7.3,
+          conditionId: 804,
+          description: 'u ám',
+          icon: '04d',
+          rain1h: 0,
+        ),
+        minutely: minutely,
+        hourly: [_h(12, 0.0, 0), _h(13, 0.0, 0)],
+        fetchedAt: base,
+      );
+      final status = sut.call(data, now: base);
+      expect(status.phase, RainPhase.rainStartingSoon);
+      expect(status.probabilityPct, 17,
+          reason: 'phải dùng pop của chính mốc nowcast đã sinh ra cảnh báo');
+    });
+  });
 }

@@ -80,6 +80,7 @@ class AnalyzeRain {
     }
     final pct = _probabilityPct(
       hourly,
+      minutely: minutely,
       eventTime: base.changeAt ?? ref,
       // Chỉ ép sàn xác suất khi ĐANG mưa thực sự (quan trắc/nowcast xác nhận) —
       // lúc đó "khả năng 30%" là vô lý. Với "sắp mưa" thì hiện pop THẬT của OWM
@@ -275,6 +276,20 @@ class AnalyzeRain {
       // mưa thật đến sau 45' sẽ ra đúng "Sắp mưa lúc HH:MM".
       for (var i = 1; i < minutely.length; i++) {
         if (minutely[i].precipitationMmH > _threshold) {
+          // ⚠️ GUARD TẦM NHÌN — thiếu ở đây là lỗi thật đã lên máy người dùng:
+          // 11/08/2026 13:12 app báo "Sắp mưa … lúc 18:30 (khoảng **317 phút**
+          // tới)", và 14:44 lại "~225 phút tới". Cả hai đường hourly đều có guard
+          // `rainSoonHorizonMinutes` (120') nhưng đường nowcast thì KHÔNG, mà
+          // nowcast 4.0 trải tới ~12.5 GIỜ (50 mốc × 15') nên nó bắn cảnh báo
+          // "sắp mưa" từ 5 tiếng trước — vô dụng và gây mất tin tưởng.
+          //
+          // Vì sao trước đây không lộ: chuỗi nowcast bị ghim cứng 0.0 (xem
+          // `WeatherRemoteDataSource`), vòng lặp này KHÔNG BAO GIỜ chạy. Sửa lỗi
+          // parse làm nhánh chết sống dậy và mang theo khiếm khuyết có sẵn.
+          if (_minutesFrom(ref, minutely[i].time) >
+              AppConfig.rainSoonHorizonMinutes) {
+            return const RainStatus.dry();
+          }
           return _onsetFromMinutely(minutely, hourly, i, ref);
         }
       }
@@ -580,6 +595,7 @@ class AnalyzeRain {
   /// null nếu không có nguồn nào.
   int? _probabilityPct(
     List<HourlyForecast> hourly, {
+    required List<MinutelyForecast> minutely,
     required DateTime eventTime,
     required bool floorProbability,
   }) {
@@ -587,7 +603,21 @@ class AnalyzeRain {
     for (final h in hourly) {
       final endsAt = h.time.add(const Duration(hours: 1));
       if (!eventTime.isBefore(h.time) && eventTime.isBefore(endsAt)) {
-        pct = (h.pop * 100).round();
+        // ⚠️ Lấy MAX với pop của chính các mốc nowcast trong khối giờ đó.
+        // Chỉ đọc `hourly.pop` là nguyên nhân câu tự mâu thuẫn đã lên máy người
+        // dùng 11/08/2026: "Dự kiến mưa lúc 18:30 … **Khả năng mưa khoảng 0%**"
+        // — cảnh báo do NOWCAST sinh ra (nowcast thấy mưa ở mốc 18:30) nhưng %
+        // lại lấy từ hourly, mà hourly cho giờ đó đang là 0. Đo thật cùng lúc:
+        // hourly 18:00 pop = 0% trong khi nowcast trong giờ đó lên tới 17%.
+        // Dùng cùng quy tắc với `effectiveHourPop` của `HourlyList` để con số
+        // trên thông báo và trên màn hình luôn khớp nhau.
+        var pop = h.pop;
+        for (final m in minutely) {
+          if (!m.time.isBefore(h.time) && m.time.isBefore(endsAt)) {
+            if (m.pop > pop) pop = m.pop;
+          }
+        }
+        pct = (pop * 100).round();
         break;
       }
     }

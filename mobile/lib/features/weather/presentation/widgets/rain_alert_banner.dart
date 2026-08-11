@@ -72,7 +72,9 @@ class RainAlertBanner extends StatelessWidget {
 
   String _chance({bool raining = false}) {
     final pct = status.probabilityPct;
-    if (pct == null) return '';
+    // pct <= 0 → im lặng thay vì in "Khả năng mưa ~0%" ngay dưới dòng báo mưa
+    // (câu tự mâu thuẫn đã lên máy người dùng 11/08/2026).
+    if (pct == null || pct <= 0) return '';
     return raining ? ' Khả năng còn mưa ~$pct%.' : ' Khả năng mưa ~$pct%.';
   }
 
