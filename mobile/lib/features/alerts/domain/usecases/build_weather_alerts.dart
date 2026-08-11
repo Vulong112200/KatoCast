@@ -61,25 +61,31 @@ class BuildWeatherAlerts {
           }
         case RainPhase.dry:
           if (_wasRaining(previousPhase)) {
-            alerts.add(WeatherAlert(
-              id: NotificationIds.rainStop,
-              title: 'Trời đã tạnh mưa',
-              body: '${KatoVoice.cleared(ref.minute)}'
-                  'Trời đã tạnh mưa tại khu vực của bạn, đường vẫn còn ướt, '
-                  'hãy di chuyển cẩn thận.',
-            ));
+            alerts.add(
+              WeatherAlert(
+                id: NotificationIds.rainStop,
+                title: 'Trời đã tạnh mưa',
+                body:
+                    '${KatoVoice.cleared(ref.minute)}'
+                    'Trời đã tạnh mưa tại khu vực của bạn, đường vẫn còn ướt, '
+                    'hãy di chuyển cẩn thận.',
+              ),
+            );
             rainAlertFired = true;
           }
         case RainPhase.raining:
           if (!_wasRaining(previousPhase)) {
-            alerts.add(WeatherAlert(
-              id: NotificationIds.rainStart,
-              title: 'Trời đang mưa',
-              body: '${KatoVoice.raining(ref.minute)}'
-                  'Hiện đang có mưa tại vị trí của bạn.'
-                  '${_chanceSuffix(rain.probabilityPct, raining: true)} '
-                  'Hãy chuẩn bị áo mưa và chú ý đường trơn trượt.',
-            ));
+            alerts.add(
+              WeatherAlert(
+                id: NotificationIds.rainStart,
+                title: 'Trời đang mưa',
+                body:
+                    '${KatoVoice.raining(ref.minute)}'
+                    'Hiện đang có mưa tại vị trí của bạn.'
+                    '${_chanceSuffix(rain.probabilityPct, raining: true)} '
+                    'Hãy chuẩn bị áo mưa và chú ý đường trơn trượt.',
+              ),
+            );
             rainAlertFired = true;
           }
       }
@@ -88,21 +94,32 @@ class BuildWeatherAlerts {
       final updated = rain.phase == RainPhase.rainStartingSoon
           ? _rainStartAlert(rain, ref)
           : _rainStopAlert(rain, ref);
-      alerts.add(WeatherAlert(
-        id: updated.id,
-        title: 'Cập nhật: ${updated.title}',
-        body: updated.body,
-      ));
+      alerts.add(
+        WeatherAlert(
+          id: updated.id,
+          title: 'Cập nhật: ${updated.title}',
+          body: updated.body,
+        ),
+      );
       rainAlertFired = true;
-    } else if (_shouldRemindOnsetClose(rain, previousChangeAt,
-        previousNotifiedAt, ref)) {
+    } else if (_shouldRemindOnsetClose(
+      rain,
+      previousChangeAt,
+      previousNotifiedAt,
+      ref,
+    )) {
       // Đã báo từ xa, cơn mưa nay áp sát → nhắc lại một lần (cùng ID).
       final base = _rainStartAlert(rain, ref);
-      alerts.add(WeatherAlert(
-        id: base.id,
-        title: 'Sắp mưa: còn khoảng ${rain.minutesUntilChange} phút',
-        body: base.body,
-      ));
+      alerts.add(
+        WeatherAlert(
+          id: base.id,
+          // `còn khoảng 0 phút` đọc rất vô nghĩa — cơn mưa tới nơi rồi thì nói thẳng.
+          title: (rain.minutesUntilChange ?? 0) <= 1
+              ? 'Sắp mưa: ngay bây giờ'
+              : 'Sắp mưa: còn khoảng ${rain.minutesUntilChange} phút',
+          body: base.body,
+        ),
+      );
       rainAlertFired = true;
     }
 
@@ -118,29 +135,38 @@ class BuildWeatherAlerts {
     // Mã mưa NHẸ/VỪA của OWM cần được xác nhận trước khi đem đi báo — xem
     // [_rainClaimUnsupported]. Không xác nhận được thì bỏ qua lượt này và GIỮ
     // `previousCategory` để lần sau (khi có bằng chứng) vẫn còn "nhóm đổi" mà báo.
-    final unsupportedRainClaim =
-        _rainClaimUnsupported(condition, rain, observedRain1hMm);
+    final suppressedReason = _rainClaimUnsupportedReason(
+      condition,
+      rain,
+      observedRain1hMm,
+    );
+    final unsupportedRainClaim = suppressedReason != null;
     if (condition.category != previousCategory &&
         !unsupportedRainClaim &&
         (previousCategory != null || _worthAnnouncingOnFreshStart(condition))) {
-      alerts.add(WeatherAlert(
-        id: NotificationIds.condition,
-        title: '${condition.emoji} ${condition.label}',
-        body: condition.advice.isNotEmpty
-            ? condition.advice
-            : 'Tình hình thời tiết hiện tại: ${condition.label}.',
-      ));
+      alerts.add(
+        WeatherAlert(
+          id: NotificationIds.condition,
+          title: '${condition.emoji} ${condition.label}',
+          body: condition.advice.isNotEmpty
+              ? condition.advice
+              : 'Tình hình thời tiết hiện tại: ${condition.label}.',
+        ),
+      );
     }
 
     // --- 3. Thay đổi môi trường mạnh — chỉ phát 1 lần cho tới khi hết mạnh ---
     if (env.hasStrongChange && !envAlreadyNotified) {
-      alerts.add(WeatherAlert(
-        id: NotificationIds.envChange,
-        title: 'Thời tiết đang thay đổi mạnh',
-        body: '${KatoVoice.envChange(ref.minute)}'
-            'Độ ẩm/Nhiệt độ hiện tại đang thay đổi mạnh, '
-            'chú ý không gian sống và thú cưng.',
-      ));
+      alerts.add(
+        WeatherAlert(
+          id: NotificationIds.envChange,
+          title: 'Thời tiết đang thay đổi mạnh',
+          body:
+              '${KatoVoice.envChange(ref.minute)}'
+              'Độ ẩm/Nhiệt độ hiện tại đang thay đổi mạnh, '
+              'chú ý không gian sống và thú cưng.',
+        ),
+      );
     }
 
     return AlertResult(
@@ -153,22 +179,25 @@ class BuildWeatherAlerts {
           : condition.category,
       // Chỉ chốt mốc mới khi pha đổi hoặc đã phát thông báo mưa; nếu không,
       // GIỮ mốc đã báo lần trước để lần sau còn so lệch được (chống drift).
-      newChangeAt:
-          (phaseChanged || rainAlertFired) ? rain.changeAt : previousChangeAt,
+      newChangeAt: (phaseChanged || rainAlertFired)
+          ? rain.changeAt
+          : previousChangeAt,
       newNotifiedAt: rainAlertFired ? ref : previousNotifiedAt,
       envNotified: env.hasStrongChange,
+      suppressedReason: suppressedReason,
     );
   }
 
   WeatherAlert _rainStartAlert(RainStatus rain, DateTime ref) => WeatherAlert(
-        id: NotificationIds.rainStart,
-        title: 'Sắp mưa tại khu vực của bạn',
-        body: '${KatoVoice.rainIncoming(ref.minute)}'
-            'Dự kiến mưa ${_timingPhrase(rain, ref)} tại vị trí của '
-            'bạn.${_chanceSuffix(rain.probabilityPct)}'
-            '${_courseSuffix(rain)} '
-            'Hãy chuẩn bị áo mưa và chú ý đường trơn trượt.',
-      );
+    id: NotificationIds.rainStart,
+    title: 'Sắp mưa tại khu vực của bạn',
+    body:
+        '${KatoVoice.rainIncoming(ref.minute)}'
+        'Dự kiến mưa ${_timingPhrase(rain, ref)} tại vị trí của '
+        'bạn.${_chanceSuffix(rain.probabilityPct)}'
+        '${_courseSuffix(rain)} '
+        'Hãy chuẩn bị áo mưa và chú ý đường trơn trượt.',
+  );
 
   /// Hậu tố mô tả cơn mưa kéo dài/diễn biến ra sao:
   /// - ≥2 đoạn cường độ → mô tả từng đoạn ("mưa vừa ~17:00–19:00, sau đó mưa
@@ -192,12 +221,13 @@ class BuildWeatherAlerts {
   }
 
   WeatherAlert _rainStopAlert(RainStatus rain, DateTime ref) => WeatherAlert(
-        id: NotificationIds.rainStop,
-        title: 'Mưa sắp tạnh',
-        body: '${KatoVoice.rainStopping(ref.minute)}'
-            'Mưa dự kiến tạnh ${_timingPhrase(rain, ref)}. '
-            'Đường vẫn còn ướt, hãy di chuyển cẩn thận.',
-      );
+    id: NotificationIds.rainStop,
+    title: 'Mưa sắp tạnh',
+    body:
+        '${KatoVoice.rainStopping(ref.minute)}'
+        'Mưa dự kiến tạnh ${_timingPhrase(rain, ref)}. '
+        'Đường vẫn còn ướt, hãy di chuyển cẩn thận.',
+  );
 
   /// Pha rainStartingSoon/rainStoppingSoon giữ nguyên nhưng thời điểm dự kiến
   /// lệch đủ lớn so với lần ĐÃ BÁO → cần báo lại. Ngưỡng bất đối xứng: mưa đến
@@ -229,7 +259,9 @@ class BuildWeatherAlerts {
     final at = rain.changeAt;
     if (at == null || previousNotifiedAt == null) return false;
     final lead = at.difference(ref).inMinutes;
-    if (lead <= 0 || lead > AppConfig.rainReminderLeadMinutes) return false;
+    // ⚠️ `lead == 0` (mưa tới NGAY BÂY GIỜ) trước đây bị chặn — tức lời nhắc tự
+    // tắt đúng vào khoảnh khắc nó có giá trị nhất. Chỉ loại mốc đã thuộc quá khứ.
+    if (lead < 0 || lead > AppConfig.rainReminderLeadMinutes) return false;
     final notifiedLead = (previousChangeAt ?? at)
         .difference(previousNotifiedAt)
         .inMinutes;
@@ -256,23 +288,38 @@ class BuildWeatherAlerts {
   /// phân loại THUẦN theo mã điều kiện nên nó không biết chuyện đó.
   ///
   /// Điều kiện xác thực (chỉ cần MỘT trong hai) — cố ý dễ, để không bịt mất tin
-  /// thật: phân tích mưa đồng ý là có mưa/sắp mưa, HOẶC có lượng mưa đo được từ
-  /// [AppConfig.rainObsMm1hThreshold] trở lên.
+  /// thật: phân tích mưa đồng ý là có mưa/sắp mưa, HOẶC **có lượng mưa đo được**
+  /// (`observedRain1hMm > 0`).
+  ///
+  /// ⚠️ Ngưỡng cũ ở đây là [AppConfig.rainObsMm1hThreshold] (0.5 mm) và nó đã
+  /// gây ra đúng sự việc 10/08/2026 18:03 — người dùng đi xe về giữa mưa nhẹ,
+  /// nhật ký ghi `mã OWM 500 · mưa 1h quan trắc 0.10 mm` nhưng thông báo bị nuốt
+  /// vì 0.10 < 0.5, và vì `newCategory` giữ nguyên nên các chu kỳ sau cũng không
+  /// còn "nhóm đổi" để báo ⇒ app im lặng suốt quãng đường. Nhật ký hai ngày có
+  /// **37 chu kỳ** mã 500 với lượng mưa 0.10–0.36 mm — tức toàn bộ dải mưa nhẹ
+  /// THẬT nằm dưới ngưỡng 0.5. Lượng mưa đo được > 0 đã là bằng chứng vật lý;
+  /// đòi thêm nữa là đòi hỏi sai chỗ.
   ///
   /// Chỉ áp cho nhóm mưa NHẸ/VỪA. Mưa to/dông/bão/lốc luôn được báo: sai một lần
   /// còn hơn im lặng trước thứ có thể gây nguy hiểm.
-  bool _rainClaimUnsupported(
+  ///
+  /// Trả `null` khi cảnh báo hợp lệ; trả **lý do** khi bị chặn, để nơi gọi GHI
+  /// NHẬT KÝ. Bản trước chặn trong im lặng nên nhật ký chỉ hiện dòng chung
+  /// "KHÔNG báo — chưa có gì đổi", che mất nguyên nhân thật.
+  String? _rainClaimUnsupportedReason(
     WeatherCondition condition,
     RainStatus rain,
     double observedRain1hMm,
   ) {
-    final softRainCategory = condition.category == WeatherCategory.drizzle ||
+    final softRainCategory =
+        condition.category == WeatherCategory.drizzle ||
         condition.category == WeatherCategory.lightRain ||
         condition.category == WeatherCategory.moderateRain;
-    if (!softRainCategory) return false;
-    final corroborated = rain.phase != RainPhase.dry ||
-        observedRain1hMm >= AppConfig.rainObsMm1hThreshold;
-    return !corroborated;
+    if (!softRainCategory) return null;
+    if (rain.phase != RainPhase.dry) return null;
+    if (observedRain1hMm > 0) return null;
+    return 'nuốt cảnh báo "${condition.label}": phân tích mưa nói pha dry và '
+        'không có lượng mưa đo được (mưa 1h quan trắc = 0.00 mm)';
   }
 
   bool _worthAnnouncingOnFreshStart(WeatherCondition condition) =>
@@ -323,6 +370,14 @@ class AlertResult {
   /// phát) — dùng để biết lần báo trước cách onset bao xa (nhắc lại khi áp sát).
   final DateTime? newNotifiedAt;
   final bool envNotified;
+
+  /// Lý do một cảnh báo ĐÁNG LẼ phát đã bị chặn (null = không chặn gì).
+  ///
+  /// Tồn tại để nơi gọi GHI NHẬT KÝ. Trước đây việc chặn diễn ra âm thầm nên khi
+  /// truy vụ 10/08/2026 (mưa nhẹ mà app im lặng) nhật ký chỉ có dòng chung
+  /// "KHÔNG báo — chưa có gì đổi", phải đọc code mới biết cảnh báo bị nuốt ở đâu.
+  final String? suppressedReason;
+
   const AlertResult({
     required this.alerts,
     required this.newPhase,
@@ -330,5 +385,6 @@ class AlertResult {
     this.newChangeAt,
     this.newNotifiedAt,
     required this.envNotified,
+    this.suppressedReason,
   });
 }

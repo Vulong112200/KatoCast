@@ -127,14 +127,19 @@ class _KatoCastAppState extends ConsumerState<KatoCastApp> {
     //    phía sau (quyền vị trí, các lớp nền, bản tin) — trước đây hai lời gọi
     //    này không có lưới nào.
     try {
-      final notificationPermission =
-          ref.read(permissionServiceProvider).requestNotificationPermission();
+      final notificationPermission = ref
+          .read(permissionServiceProvider)
+          .requestNotificationPermission();
       await ref.read(notificationServiceProvider).init();
       await notificationPermission;
     } catch (e, st) {
-      await AppLog.e(LogSource.ui, LogTags.notify,
-          'lỗi khởi tạo/xin quyền thông báo lúc mở app',
-          error: e, stack: st);
+      await AppLog.e(
+        LogSource.ui,
+        LogTags.notify,
+        'lỗi khởi tạo/xin quyền thông báo lúc mở app',
+        error: e,
+        stack: st,
+      );
     }
 
     // 2. App được mở từ notification ghi chú (cold launch) → vào màn Ghi chú.
@@ -160,6 +165,14 @@ class _KatoCastAppState extends ConsumerState<KatoCastApp> {
     //    độc lập chứ không phải nguồn tranh chấp. Xem `background_triggers.dart`.
     await applyBackgroundTriggers();
 
+    // 4b. Xin quyền vị trí NỀN ("Luôn cho phép") — MỘT LẦN, có giải thích.
+    //     Thiếu quyền này thì `resolveBackgroundCoords` không bao giờ xin được
+    //     fix mới lúc app đóng, nên nền chỉ còn biết vị trí của lần mở app gần
+    //     nhất → đang đi đường mà app báo thời tiết chỗ cũ. Trước đây lời xin
+    //     này CHỈ nằm trong Settings và trang Nhật ký, tức người dùng phải tự
+    //     tìm ra mới bật được.
+    await _promptBackgroundLocationIfNeeded();
+
     // 5. Lập lịch bản tin hằng ngày + hồi phục ghim/lịch ghi chú.
     //    KHÔNG await nối tiếp: cả hai đều thực hiện nhiều lời gọi binder
     //    AlarmManager/notification — chạy fire-and-forget để không giữ luồng
@@ -174,8 +187,13 @@ class _KatoCastAppState extends ConsumerState<KatoCastApp> {
           ref.read(notificationServiceProvider),
         );
       } catch (e, st) {
-        await AppLog.e(LogSource.ui, LogTags.db, 'lỗi re-assert ghim ghi chú',
-            error: e, stack: st);
+        await AppLog.e(
+          LogSource.ui,
+          LogTags.db,
+          'lỗi re-assert ghim ghi chú',
+          error: e,
+          stack: st,
+        );
       }
     }());
 
@@ -213,8 +231,9 @@ class _KatoCastAppState extends ConsumerState<KatoCastApp> {
   /// Mở màn Ghi chú nếu app được khởi động bằng cách chạm notification ghi chú.
   Future<void> _routeFromLaunchNotification() async {
     try {
-      final launch =
-          await ref.read(notificationServiceProvider).getLaunchDetails();
+      final launch = await ref
+          .read(notificationServiceProvider)
+          .getLaunchDetails();
       final resp = launch?.notificationResponse;
       if ((launch?.didNotificationLaunchApp ?? false) &&
           parseNotePayload(resp?.payload) != null) {
@@ -242,9 +261,13 @@ class _KatoCastAppState extends ConsumerState<KatoCastApp> {
       );
       await startWeatherForegroundService(allowRestart: false);
     } catch (e, st) {
-      await AppLog.e(LogSource.ui, LogTags.service,
-          'không bật lại được theo dõi liên tục khi mở app',
-          error: e, stack: st);
+      await AppLog.e(
+        LogSource.ui,
+        LogTags.service,
+        'không bật lại được theo dõi liên tục khi mở app',
+        error: e,
+        stack: st,
+      );
     }
   }
 
@@ -264,6 +287,81 @@ class _KatoCastAppState extends ConsumerState<KatoCastApp> {
       await prefs.setInt(key, nowMs);
       await permission.requestIgnoreBatteryOptimizations();
     } catch (_) {}
+  }
+
+  /// Onboarding MỘT LẦN: xin quyền vị trí NỀN ("Luôn cho phép").
+  ///
+  /// Vì sao cần một hộp thoại giải thích riêng thay vì gọi thẳng: từ Android 11,
+  /// lời xin quyền nền KHÔNG hiện hộp thoại hệ thống mà mở thẳng trang cài đặt
+  /// app. Quăng người dùng vào Settings không kèm lời nào thì họ không biết phải
+  /// bấm gì, và đó là lý do quyền này gần như không bao giờ được bật.
+  ///
+  /// Chỉ hỏi khi đã có quyền vị trí foreground (Android bắt buộc thứ tự đó), và
+  /// chỉ hỏi MỘT lần — từ chối thì thôi, Settings và trang Nhật ký vẫn còn nút.
+  Future<void> _promptBackgroundLocationIfNeeded() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      const key = 'onboarded_bg_location';
+      if (prefs.getBool(key) ?? false) return;
+
+      final permission = ref.read(permissionServiceProvider);
+      if (await permission.hasBackgroundLocation()) {
+        await prefs.setBool(key, true);
+        return;
+      }
+      // Chưa có quyền vị trí cơ bản → hỏi quyền nền là vô nghĩa, để lần sau.
+      if (!await permission.hasForegroundLocation()) return;
+      if (!mounted) return;
+
+      final agreed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Để Kato báo mưa đúng nơi bạn đang đi'),
+          content: const SingleChildScrollView(
+            child: Text(
+              'Khi bạn đóng app, Kato chỉ còn biết vị trí của lần mở app gần '
+              'nhất. Đang trên đường về mà app lại báo thời tiết ở chỗ làm thì '
+              'cảnh báo mưa gần như vô dụng — mưa rào thường chỉ rộng vài km.\n\n'
+              'Hãy chọn "Luôn cho phép" ở mục Vị trí để Kato tự cập nhật chỗ bạn '
+              'đang đứng.\n\n'
+              'Bạn có thể bật/tắt lại bất cứ lúc nào trong Cài đặt.',
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Để sau'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Mở cài đặt'),
+            ),
+          ],
+        ),
+      );
+
+      // Ghi cờ dù chọn gì: đây là lời mời MỘT LẦN, không phải vòng lặp nhắc nhở.
+      await prefs.setBool(key, true);
+      if (agreed != true) return;
+
+      final granted = await permission.requestBackgroundLocation();
+      await AppLog.i(
+        LogSource.ui,
+        LogTags.boot,
+        granted
+            ? 'đã cấp quyền vị trí nền ("Luôn cho phép")'
+            : 'CHƯA cấp quyền vị trí nền — nền sẽ không tự cập nhật vị trí khi '
+                  'bạn di chuyển',
+      );
+    } catch (e, st) {
+      await AppLog.e(
+        LogSource.ui,
+        LogTags.boot,
+        'lỗi khi xin quyền vị trí nền',
+        error: e,
+        stack: st,
+      );
+    }
   }
 
   /// Onboarding MỘT LẦN: hướng dẫn bật Tự khởi động + Không giới hạn pin để
@@ -327,8 +425,13 @@ class _KatoCastAppState extends ConsumerState<KatoCastApp> {
       final prefs = await NotificationPrefsStore().read();
       await scheduleDigests(prefs, force: true, source: LogSource.ui);
     } catch (e, st) {
-      await AppLog.e(LogSource.ui, LogTags.digest, 'lỗi lập lịch bản tin khi mở app',
-          error: e, stack: st);
+      await AppLog.e(
+        LogSource.ui,
+        LogTags.digest,
+        'lỗi lập lịch bản tin khi mở app',
+        error: e,
+        stack: st,
+      );
     }
   }
 
@@ -340,8 +443,12 @@ class _KatoCastAppState extends ConsumerState<KatoCastApp> {
       await scheduleAnnouncementCheck(prefs, force: true, source: LogSource.ui);
     } catch (e, st) {
       await AppLog.e(
-          LogSource.ui, LogTags.announce, 'lỗi lập lịch poll tin khi mở app',
-          error: e, stack: st);
+        LogSource.ui,
+        LogTags.announce,
+        'lỗi lập lịch poll tin khi mở app',
+        error: e,
+        stack: st,
+      );
     }
   }
 

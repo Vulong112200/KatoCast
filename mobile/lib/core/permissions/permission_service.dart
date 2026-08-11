@@ -84,6 +84,20 @@ class PermissionService {
     }
   }
 
+  /// Đã có quyền vị trí mức foreground chưa (`whileInUse` hoặc `always`)?
+  ///
+  /// Android bắt buộc phải có mức này TRƯỚC khi xin được quyền nền, nên nơi gọi
+  /// dùng nó để biết có đáng hỏi "Luôn cho phép" hay chưa.
+  Future<bool> hasForegroundLocation() async {
+    try {
+      final p = await Geolocator.checkPermission();
+      return p == LocationPermission.always ||
+          p == LocationPermission.whileInUse;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// Xin quyền vị trí nền ("Luôn cho phép").
   ///
   /// Android yêu cầu xin mức foreground TRƯỚC, và từ Android 11 thì lời xin nền
@@ -116,8 +130,9 @@ class PermissionService {
     return PermissionGate.run(() async {
       if (await ph.Permission.notification.isGranted) return true;
       try {
-        final status =
-            await ph.Permission.notification.request().timeout(_dialogTimeout);
+        final status = await ph.Permission.notification.request().timeout(
+          _dialogTimeout,
+        );
         return status.isGranted;
       } on TimeoutException {
         // Không nhận được phản hồi → coi như chưa cấp; app vẫn chạy tiếp thay vì

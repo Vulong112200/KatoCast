@@ -402,23 +402,51 @@ void main() {
   });
 
   group('KHÔNG nói ngược với phân tích mưa (mã mưa nhẹ/vừa cần xác thực)', () {
-    test('ca thật 06/08 09:38: pha dry + mã 500 + rain1h 0.16 ⇒ KHÔNG báo', () {
-      // Nhật ký thật, CÙNG một chu kỳ: `pha: dry · tình hình: Mưa nhỏ · nowcast
-      // bây giờ: 0.00 mm/h · mưa 1h quan trắc: 0.16 mm · mã điều kiện OWM: 500`
-      // rồi `ĐÃ BÁO: 🌦️ Mưa nhỏ — "Có mưa nhỏ. Mang theo ô cho chắc chắn."`
-      // App tự nói ngược với chính mình, chỉ vì mã điều kiện của OWM.
+    test('ca thật 10/08 18:03: pha dry + mã 500 + rain1h 0.10 ⇒ PHẢI báo', () {
+      // ⚠️ Test này TỪNG khẳng định điều NGƯỢC LẠI ("rain1h 0.16 ⇒ KHÔNG báo"),
+      // vì ngưỡng xác thực khi đó là `rainObsMm1hThreshold` = 0.5 mm.
+      //
+      // Nhật ký thật 10/08/2026 18:03:12 cho thấy đó là sai lầm: người dùng đang
+      // đi xe máy về giữa mưa nhẹ, app ghi `mã OWM 500 · mưa 1h quan trắc
+      // 0.10 mm` tại `317 Đường số 8, Thông Tây Hội` (đúng trên lộ trình) rồi
+      // NUỐT thông báo vì 0.10 < 0.5. Vì `newCategory` bị giữ nguyên nên các chu
+      // kỳ sau cũng không còn "nhóm đổi" để báo ⇒ im lặng suốt quãng đường.
+      // Toàn bộ nhật ký 2 ngày có 37 chu kỳ mã 500 với lượng mưa 0.10–0.36 mm,
+      // tức CẢ DẢI mưa nhẹ thật đều nằm dưới ngưỡng cũ.
+      //
+      // Lượng mưa đo được > 0 đã là bằng chứng vật lý — đó là mức xác thực đúng.
       final r = sut.call(
         rain: const RainStatus.dry(),
         condition: WeatherCondition.classify(500),
         env: EnvChange.none,
         previousPhase: RainPhase.dry,
         previousCategory: WeatherCategory.cloudy,
-        observedRain1hMm: 0.16,
+        observedRain1hMm: 0.10,
+        now: _now,
+      );
+      expect(r.alerts.single.title, contains('Mưa nhỏ'));
+      expect(r.newCategory, WeatherCategory.lightRain);
+      expect(r.suppressedReason, isNull);
+    });
+
+    test('mã 500 nhưng KHÔNG đo được mưa nào (0.00) ⇒ vẫn KHÔNG báo', () {
+      // Lưới chống "app nói ngược với chính mình" vẫn còn: phân tích mưa kết
+      // luận khô VÀ không có milimét nào đo được thì mã điều kiện suông của OWM
+      // không đủ để khẳng định đang mưa.
+      final r = sut.call(
+        rain: const RainStatus.dry(),
+        condition: WeatherCondition.classify(500),
+        env: EnvChange.none,
+        previousPhase: RainPhase.dry,
+        previousCategory: WeatherCategory.cloudy,
+        observedRain1hMm: 0,
         now: _now,
       );
       expect(r.alerts, isEmpty);
       // GIỮ nhóm cũ: khi có bằng chứng thật, "nhóm đổi" vẫn còn hiệu lực để báo.
       expect(r.newCategory, WeatherCategory.cloudy);
+      // …và lần này phải NÓI RA lý do để nhật ký ghi lại được.
+      expect(r.suppressedReason, isNotNull);
     });
 
     test('cùng ca đó nhưng phân tích mưa nói SẮP MƯA ⇒ được báo', () {

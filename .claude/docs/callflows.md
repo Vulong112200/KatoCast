@@ -65,6 +65,13 @@ main()  ──▶ ensureTimezoneInitialized()   # nạp tzdata + set tz.local + 
          ▼   [từ chối → log warn, app vẫn chạy; WeatherScreen hiện PermissionDeniedWidget]
      (4) applyBackgroundTriggers()   # CHỈ ĐẾN ĐÂY mới bật FG service (kiểu `location`
          │                           # đòi quyền vị trí runtime — xem bug 11/20)
+    (4b) _promptBackgroundLocationIfNeeded()   # MỜI quyền "Luôn cho phép" — MỘT LẦN
+         │  hộp thoại GIẢI THÍCH trước rồi mới requestBackgroundLocation():
+         │  Android 11+ KHÔNG hiện hộp thoại hệ thống mà mở thẳng trang cài đặt app,
+         │  quăng người dùng vào đó không kèm lời nào thì họ không biết bấm gì.
+         │  Chỉ hỏi khi đã có quyền foreground; từ chối KHÔNG chặn khởi động.
+         └─ thiếu quyền này ⇒ `resolveBackgroundCoords` không bao giờ xin được fix mới
+            lúc app đóng ⇒ đang đi đường mà app báo thời tiết chỗ cũ. Xem bug (28).
      (5) unawaited: scheduleDigests · scheduleAnnouncementCheck · reassertNoteNotifications
      (6) unawaited: CycleLock.runGuarded(ui, runWeatherCheck)
      (7) requestExactAlarmPermission()   # isGranted trước ⇒ Android 13+ KHÔNG mở màn cài đặt
@@ -193,7 +200,10 @@ BA LỚP đều gọi runWeatherCheck (isolate riêng tự dựng DI), MỖI L�
    ▼   Arm trước = chuỗi tự duy trì; chỉ ghi đè mốc ở cuối khi fetch fail (retrySoon → 5').
 runWeatherCheck(source, db) (core/background/weather_check.dart):
    resolveBackgroundCoords(source) — 3 bước, KHÔNG chỉ đọc toạ độ cũ:
-      (1) getLastKnownPosition còn tươi? → dùng
+      (1) getLastKnownPosition còn tươi (≤ backgroundCoordsFreshMinutes 25')? → dùng
+          ← bản cũ nhận tới 24 GIỜ rồi `return` luôn ⇒ bước (2) thành CODE CHẾT, và
+            `store.save()` còn đóng dấu savedAt=now cho toạ độ cũ. Fix ở bug (27);
+            fix cũ hơn 25' được giữ làm lưới cuối ở (3), chọn nguồn MỚI HƠN.
       (2) toạ độ đang có cũ hơn 25' → CHỦ ĐỘNG getCurrentPosition (accuracy low, timeLimit 25s)
           ← bước MỚI: trên máy thật (1) hầu như luôn null, nên trước đây nền mãi dùng toạ độ
             từ lần MỞ APP gần nhất → di chuyển mà vẫn báo thời tiết chỗ cũ
@@ -218,6 +228,17 @@ AnalyzeRain(now) [KẾT HỢP 3 NGUỒN: quan trắc current ĐÈ nowcast khi tr
    │   cảnh báo chỉ phát khi pha ĐỔI nên app kẹt "đang mưa" >15h: vừa báo sai, vừa im lặng,
    │   vừa KHÔNG BAO GIỜ tới được rainStartingSoon (mất hẳn cảnh báo "sắp mưa").
    │   _obsIndicatesRain: mã YẾU (500 light rain, 3xx drizzle) cần rain1h>0; mã MẠNH (2xx, 501+) tin ngay.
+   │ ⚠️⚠️ VÒNG 5 — chuỗi `minutely` LẤY TỪ ĐÂU (lỗi gốc vụ 10/08/2026):
+   │   `/timeline/15min` của 4.0 **KHÔNG có trường `rain`** kể cả khi mưa to; nó chỉ mang
+   │   `pop` + `weather[].id`. Bản cũ đọc `rain` → chuỗi nowcast ghim cứng 0.0 ở **168/168**
+   │   chu kỳ suốt 2 ngày (kể cả 37 chu kỳ `current` báo mã 500 kèm mưa đo được) → pha luôn
+   │   `dry`. Vì nowcast vừa là nguồn CHÍNH vừa có quyền PHỦ QUYẾT quan trắc, app mù hẳn với
+   │   mưa nhỏ. ⇒ `WeatherRemoteDataSource.precipFromCondition` suy mm/h từ `weather[].id`.
+   │   `nowcastDeniesRain` nay QUÉT THẬT cả cửa sổ (không dùng xấp xỉ `phase == dry`, vốn vẫn
+   │   `true` khi nowcast đang báo 0.1–0.49 mm/h ⇒ nowcast THẤY MƯA mà vẫn phủ quyết).
+   │   ⚠️ KHÔNG nới van khi nowcast toàn 0: nowcast CHẠY ĐÚNG và chắc chắn khô cũng cho toàn 0
+   │   — không phân biệt được bằng giá trị; nới sẽ hồi sinh bug (14)/(21). Chống bằng PHÁT HIỆN:
+   │   log `warn` "NGHI VẤN nowcast" khi nowcast phẳng lì 0 mà `current.rain1h > 0`.
    │   ⚠️ rain1h là số TÍCH LŨY 1 GIỜ nên còn dư ~1h SAU KHI mưa tạnh (OWM vẫn giữ mã 500):
    │   nhật ký 01/08 `nowcast 0.00 · rain1h 0.74 · mã 500` → app báo "đang mưa 80%" lúc trời đã
    │   tạnh, rồi KẸT pha raining = im lặng. ⇒ nowcastSawNoRainAtAll (nowcast có dữ liệu và kết
@@ -241,6 +262,10 @@ BuildWeatherAlerts(rain, env, previousPhase + previousChangeAt + previousNotifie
    │ khoảng đứt lại phát "🌤️ Nhiều mây" vô ích (chiếm phần lớn thông báo trong ngày).
    │ nội dung mưa: giờ bắt đầu (HH:MM từ changeAt) + % + giờ tạnh/thời lượng (rainEndsAt)
    │  + "Diễn biến: mưa vừa ~17:00–19:00, sau đó mưa nhỏ..." (describeRainCourse khi ≥2 đoạn)
+   ▼
+   │ `_rainClaimUnsupportedReason` trả LÝ DO (không còn bool) → weather_check ghi dòng `skip`
+   │ nói thẳng cảnh báo nào bị nuốt + số liệu thô. Xác thực nhóm mưa nhẹ/vừa nay chỉ cần
+   │ **lượng mưa đo được > 0** (ngưỡng cũ ≥0.5 đã nuốt CẢ DẢI mưa nhẹ thật 0.10–0.36 mm).
    ▼
 NotificationService.show(id cố định) → AppLog.i(notify, "ĐÃ BÁO: <tiêu đề>" + id + nội dung)
    │ (không có alert nào → AppLog.i(skip, "chưa có gì đổi" + pha trước/nay + mốc đã báo + báo lúc))

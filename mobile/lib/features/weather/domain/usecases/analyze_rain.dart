@@ -51,12 +51,23 @@ class AnalyzeRain {
     //
     // [nowcastSawNoRainAtAll] chặn ca NGƯỢC LẠI: mưa VỪA TẠNH, `rain1h` còn dư
     // — xem [_obsIndicatesRain].
+    // ⚠️ Nowcast chỉ được quyền PHỦ QUYẾT quan trắc khi nó THẬT SỰ nói khô trên
+    // TOÀN cửa sổ. Bản cũ suy cờ này từ `base.phase == RainPhase.dry` — một phép
+    // xấp xỉ SAI: pha vẫn ra `dry` khi mốc hiện tại có mưa nhẹ 0.1–0.49 mm/h
+    // (chưa đủ tuyên bố "đang mưa", mà vòng tìm onset lại bỏ qua mốc hiện tại).
+    // Khi đó nowcast ĐANG THẤY MƯA nhưng vẫn phủ quyết quan trắc — đúng chiều
+    // gây im lặng. Nay quét thật cả cửa sổ; điều kiện `phase == dry` giữ nguyên
+    // để không mất carve-out "nowcast thấy mưa sắp tới thì đừng phủ quyết".
+    final nowcastDeniesRain =
+        minutely.isNotEmpty &&
+        base.phase == RainPhase.dry &&
+        minutely.every((m) => m.precipitationMmH <= _threshold);
+
     if (!base.isRainingNow &&
         _obsIndicatesRain(
           data.current,
           ref,
-          nowcastSawNoRainAtAll:
-              minutely.isNotEmpty && base.phase == RainPhase.dry,
+          nowcastSawNoRainAtAll: nowcastDeniesRain,
         )) {
       base = RainStatus.raining(fromMinutely: base.fromMinutely);
     }
@@ -207,6 +218,17 @@ class AnalyzeRain {
   /// `minutely.first`) thì mưa VẾT lúc trời âm u cũng bật pha `raining`, và vì
   /// pha chỉ đổi khi giá trị khác đi, app sẽ KẸT ở "đang mưa" nhiều giờ: không
   /// còn cảnh báo "sắp mưa", cũng không còn thông báo nào cả.
+  ///
+  /// ⚠️ Khoảng `(rainThresholdMmH, rainNowThresholdMmH)` = 0.1–0.49 mm/h từng là
+  /// một **VÙNG CHẾT**: quá yếu để gọi "đang mưa", nhưng đủ để mốc kế tiếp bị gán
+  /// "sắp mưa", nên mỗi chu kỳ mốc onset lại trượt về sau, pha đứng yên ở
+  /// `rainStartingSoon` và `phaseChanged` không bao giờ true ⇒ app im lặng trong
+  /// khi ngoài trời đang mưa nhẹ. Nay vùng chết KHÔNG THỂ XẢY RA từ nowcast: mọi
+  /// giá trị `minutely` được suy từ `weather[].id` (xem
+  /// `WeatherRemoteDataSource._precipFromCondition`) và bảng ánh xạ cố ý không có
+  /// mức nào rơi vào 0.1–0.49 — mỗi mốc hoặc 0.0, hoặc ≥ 0.5. Giữ ngưỡng 0.5 ở
+  /// đây vì nó vẫn cần cho `_fromHourly` (mm THẬT, có thể là 0.2) và vì nó là
+  /// lưới chống báo nhầm đã được tinh chỉnh qua nhiều vòng.
   bool _nowcastSaysRainingNow(List<MinutelyForecast> minutely) {
     final now = minutely.first.precipitationMmH;
     if (now >= AppConfig.rainNowObviousMmH) return true;
@@ -302,8 +324,9 @@ class AnalyzeRain {
         RainSegment(
           start: changeAt,
           end: minutelyEnd,
-          intensity:
-              _intensityOfMmH(_maxMinutelyRate(minutely, onsetIndex, to: endIndex)),
+          intensity: _intensityOfMmH(
+            _maxMinutelyRate(minutely, onsetIndex, to: endIndex),
+          ),
         ),
       ];
     } else {
@@ -407,12 +430,17 @@ class AnalyzeRain {
   /// Lượng mưa lớn nhất (mm/h) trong khoảng [from, to) của nowcast — dùng phân
   /// cường độ cho đoạn mưa suy từ minutely. [to] mặc định hết chuỗi; truyền chỉ
   /// số kết thúc cơn mưa để KHÔNG tính lẫn cơn mưa khác ở phần sau cửa sổ.
-  double _maxMinutelyRate(List<MinutelyForecast> minutely, int from,
-      {int? to}) {
+  double _maxMinutelyRate(
+    List<MinutelyForecast> minutely,
+    int from, {
+    int? to,
+  }) {
     final end = to ?? minutely.length;
     var max = 0.0;
     for (var i = from; i < end; i++) {
-      if (minutely[i].precipitationMmH > max) max = minutely[i].precipitationMmH;
+      if (minutely[i].precipitationMmH > max) {
+        max = minutely[i].precipitationMmH;
+      }
     }
     return max;
   }
@@ -427,7 +455,8 @@ class AnalyzeRain {
     // `_isWetHour` (vốn nhận cả `pop >= 50%`): "50% khả năng mưa trong giờ này"
     // không phải là "trời đang mưa". Đây là cùng loại lỗi với ngưỡng nowcast —
     // nó khiến pha kẹt ở `raining` và giết mọi cảnh báo "sắp mưa".
-    final rainingNow = !hourly.first.time.isAfter(ref) &&
+    final rainingNow =
+        !hourly.first.time.isAfter(ref) &&
         hourly.first.rainMm >= AppConfig.rainNowThresholdMmH;
 
     if (!rainingNow) {
@@ -495,8 +524,7 @@ class AnalyzeRain {
     while (i < hourly.length && _isWetHour(hourly[i])) {
       // Chuỗi phải liền kề về thời gian; dữ liệu đứt quãng → khép chuỗi.
       if (i > fromIndex &&
-          hourly[i].time !=
-              hourly[i - 1].time.add(const Duration(hours: 1))) {
+          hourly[i].time != hourly[i - 1].time.add(const Duration(hours: 1))) {
         brokeByGap = true;
         break;
       }
@@ -508,12 +536,14 @@ class AnalyzeRain {
           ..end = blockEnd
           ..maxPop = math.max(segs.last.maxPop, pop);
       } else {
-        segs.add(_SegBuilder(
-          start: segs.isEmpty ? (startAt ?? hourly[i].time) : hourly[i].time,
-          end: blockEnd,
-          intensity: intensity,
-          maxPop: pop,
-        ));
+        segs.add(
+          _SegBuilder(
+            start: segs.isEmpty ? (startAt ?? hourly[i].time) : hourly[i].time,
+            end: blockEnd,
+            intensity: intensity,
+            maxPop: pop,
+          ),
+        );
       }
       i++;
     }

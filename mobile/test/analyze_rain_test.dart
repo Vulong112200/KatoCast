@@ -703,4 +703,72 @@ void main() {
       expect(status.phase, isNot(RainPhase.raining));
     });
   });
+
+  group('AnalyzeRain - ca thật 10/08/2026 (mưa nhẹ khi đang đi đường)', () {
+    // Nhật ký thật 10/08/2026 18:03:12, người dùng đang đi xe máy về nhà, vị trí
+    // ghi nhận `317 Đường số 8, Thông Tây Hội` (đúng trên lộ trình):
+    //   pha=dry · tình hình=Mưa nhỏ · mã OWM=500 · mưa 1h quan trắc=0.10 mm
+    //   nowcast bây giờ=0.00 mm/h  →  KHÔNG báo
+    // Suốt 2 ngày: 168/168 chu kỳ có nowcast = 0.00 và pha = dry, trong khi 37
+    // chu kỳ có mã 500 kèm lượng mưa đo được. Nguyên nhân: nowcast 15' của One
+    // Call 4.0 không có trường `rain`, bản cũ đọc nhầm nên chuỗi luôn bằng 0.
+
+    test('nowcast SUY TỪ mã 500 (1.0 mm/h) duy trì ⇒ ĐANG mưa', () {
+      // Sau khi sửa parse, mốc nowcast mang mã 500 ra 1.0 mm/h.
+      final status = sut.call(
+        _data(
+          minutely: List<double>.filled(8, 1.0),
+          stepMinutes: 15,
+          conditionId: 500,
+          rain1h: 0.10,
+        ),
+        now: base,
+      );
+      expect(status.phase, RainPhase.raining,
+          reason: 'mưa nhỏ liên tục phải là ĐANG mưa, không phải sắp mưa');
+    });
+
+    test('nowcast toàn 0 + rain1h nhỏ ⇒ VẪN không raining (dư của cơn đã tạnh)',
+        () {
+      // ⚠️ Chủ ý GIỮ van `nowcastSawNoRainAtAll` ở ca này, dù chính nó đã nuốt
+      // thông báo hôm 10/08. Lý do: một nowcast CHẠY ĐÚNG và tự tin "hai tiếng
+      // tới không mưa" cũng cho toàn số 0 — không thể phân biệt "nowcast chết"
+      // với "nowcast chắc chắn khô" bằng giá trị. Nới van ở đây sẽ làm sống lại
+      // bug kẹt pha vòng 3/4: `rain1h` là số TÍCH LŨY nên còn dư gần một tiếng
+      // sau khi mưa đã tạnh (nhật ký 01/08 `rain1h 0.74 · mã 500`, 06/08
+      // `rain1h 1.55 · mã 501` → app báo "đang mưa" lúc trời đã tạnh rồi KẸT pha
+      // `raining` hàng giờ = im lặng hoàn toàn).
+      //
+      // Cách chống nowcast chết KHÔNG phải là ghi đè, mà là PHÁT HIỆN: xem dòng
+      // cảnh báo "NGHI VẤN nowcast" trong `weather_check.dart`. Lỗi 168/168 chu
+      // kỳ sống sót nhiều tuần chính vì trước đó KHÔNG có dòng log nào.
+      final status = sut.call(
+        _data(
+          minutely: List<double>.filled(8, 0.0),
+          stepMinutes: 15,
+          conditionId: 500,
+          rain1h: 0.10,
+        ),
+        now: base,
+      );
+      expect(status.phase, isNot(RainPhase.raining));
+    });
+
+    test('mốc hiện tại có mưa ⇒ KHÔNG bị gán thành "sắp mưa" ở mốc sau', () {
+      // Vùng chết: nếu mốc hiện tại ướt mà pha ra `rainStartingSoon`, mỗi chu kỳ
+      // mốc onset lại trượt về sau ⇒ pha đứng yên ⇒ `phaseChanged` không bao giờ
+      // true ⇒ app im lặng vĩnh viễn dù ngoài trời đang mưa.
+      final status = sut.call(
+        _data(
+          minutely: List<double>.filled(8, 0.6), // mưa phùn 3xx
+          stepMinutes: 15,
+          conditionId: 300,
+          rain1h: 0.10,
+        ),
+        now: base,
+      );
+      expect(status.phase, isNot(RainPhase.rainStartingSoon));
+      expect(status.isRainingNow, isTrue);
+    });
+  });
 }

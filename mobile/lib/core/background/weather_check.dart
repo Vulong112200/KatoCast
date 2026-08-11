@@ -142,8 +142,13 @@ Future<WeatherData?> runWeatherCheck({
         );
       }
     } catch (e, st) {
-      await AppLog.e(source, LogTags.notify, 'lỗi khi sinh cảnh báo',
-          error: e, stack: st);
+      await AppLog.e(
+        source,
+        LogTags.notify,
+        'lỗi khi sinh cảnh báo',
+        error: e,
+        stack: st,
+      );
     }
 
     // Bản tin hằng ngày + poll tin: đảm bảo alarm khớp cài đặt (idempotent, có
@@ -152,15 +157,25 @@ Future<WeatherData?> runWeatherCheck({
       final dp = await NotificationPrefsStore().read();
       await scheduleDigests(dp, source: source);
     } catch (e, st) {
-      await AppLog.e(source, LogTags.digest, 'lỗi lập lịch bản tin',
-          error: e, stack: st);
+      await AppLog.e(
+        source,
+        LogTags.digest,
+        'lỗi lập lịch bản tin',
+        error: e,
+        stack: st,
+      );
     }
     try {
       final ap = await AnnouncementPrefsStore().read();
       await scheduleAnnouncementCheck(ap, source: source);
     } catch (e, st) {
-      await AppLog.e(source, LogTags.announce, 'lỗi lập lịch poll tin',
-          error: e, stack: st);
+      await AppLog.e(
+        source,
+        LogTags.announce,
+        'lỗi lập lịch poll tin',
+        error: e,
+        stack: st,
+      );
     }
 
     return data;
@@ -208,7 +223,8 @@ Future<void> _maybeAlert(WeatherData data, String source) async {
       'nowcast bây giờ': nowcastNow == null
           ? 'không có'
           : '${nowcastNow.toStringAsFixed(2)} mm/h',
-      'ngưỡng ĐANG mưa': '${AppConfig.rainNowThresholdMmH} mm/h '
+      'ngưỡng ĐANG mưa':
+          '${AppConfig.rainNowThresholdMmH} mm/h '
           '× ${AppConfig.rainNowSustainedSlots} mốc',
       'mưa 1h quan trắc': '${data.current.rain1h.toStringAsFixed(2)} mm',
       'mã điều kiện OWM': data.current.conditionId ?? 'không có',
@@ -219,10 +235,32 @@ Future<void> _maybeAlert(WeatherData data, String source) async {
       if (rain.probabilityPct != null) 'xác suất': '${rain.probabilityPct}%',
       if (rain.segments.length >= 2) 'số đoạn mưa': rain.segments.length,
       if (env.hasStrongChange)
-        'môi trường': 'Δt ${env.tempDeltaC.toStringAsFixed(1)}°C · '
+        'môi trường':
+            'Δt ${env.tempDeltaC.toStringAsFixed(1)}°C · '
             'Δẩm ${env.humidityDeltaPct.toStringAsFixed(0)}%',
     },
   );
+
+  // Nowcast phẳng lì 0 trong khi quan trắc đang đo được mưa = dấu hiệu nowcast
+  // KHÔNG dùng được (sai schema, endpoint đổi, thiếu dữ liệu vùng...). Đây đúng
+  // là tình trạng đã kéo dài âm thầm tới 10/08/2026: `/timeline/15min` của One
+  // Call 4.0 không hề có trường `rain` nên chuỗi nowcast bị ghim cứng 0.00 ở
+  // 168/168 chu kỳ. Không dòng log nào tố cáo, nên lỗi sống sót nhiều tuần.
+  if (data.minutely.isNotEmpty &&
+      data.current.rain1h > 0 &&
+      data.minutely.every((m) => m.precipitationMmH <= 0)) {
+    await AppLog.w(
+      source,
+      LogTags.analyze,
+      'NGHI VẤN nowcast: quan trắc đo được mưa nhưng TOÀN BỘ mốc nowcast đều '
+      'bằng 0 — nowcast có thể không dùng được',
+      data: {
+        'mưa 1h quan trắc': '${data.current.rain1h.toStringAsFixed(2)} mm',
+        'số mốc nowcast': data.minutely.length,
+        'mã điều kiện OWM': data.current.conditionId ?? 'không có',
+      },
+    );
+  }
 
   final store = AlertStateStore();
   final prev = await store.read();
@@ -232,7 +270,10 @@ Future<void> _maybeAlert(WeatherData data, String source) async {
       LogTags.skip,
       'trạng thái cảnh báo lần trước ĐÃ QUÁ CŨ → coi như khởi đầu mới '
       '(app vừa bị ngắt một khoảng dài)',
-      data: {'tuổi': '${prev.age!.inMinutes}p', 'trần': '${AlertStateStore.maxAge.inMinutes}p'},
+      data: {
+        'tuổi': '${prev.age!.inMinutes}p',
+        'trần': '${AlertStateStore.maxAge.inMinutes}p',
+      },
     );
   }
 
@@ -249,6 +290,23 @@ Future<void> _maybeAlert(WeatherData data, String source) async {
     // chỉ vì mã điều kiện OWM, khi phân tích mưa đã kết luận trời khô.
     observedRain1hMm: data.current.rain1h,
   );
+
+  // Cảnh báo bị CHẶN có chủ đích → nói thẳng lý do. Không có dòng này thì một
+  // thông báo bị nuốt trông y hệt "trời chẳng có gì đổi" (vụ 10/08/2026).
+  if (out.suppressedReason != null) {
+    await AppLog.w(
+      source,
+      LogTags.skip,
+      out.suppressedReason!,
+      data: {
+        'nowcast bây giờ': nowcastNow == null
+            ? 'không có'
+            : '${nowcastNow.toStringAsFixed(2)} mm/h',
+        'mưa 1h quan trắc': '${data.current.rain1h.toStringAsFixed(2)} mm',
+        'mã điều kiện OWM': data.current.conditionId ?? 'không có',
+      },
+    );
+  }
 
   if (out.alerts.isEmpty) {
     await AppLog.i(
@@ -300,11 +358,13 @@ Future<void> _purgeCacheIfDue(
     const dayMs = 24 * 60 * 60 * 1000;
     if (lastMs != 0 && nowMs - lastMs < dayMs) return;
 
-    await local.purgeOlderThan(
-      const Duration(days: AppConfig.cacheMaxAgeDays),
-    );
+    await local.purgeOlderThan(const Duration(days: AppConfig.cacheMaxAgeDays));
     await prefs.setInt(_kLastPurgeMsKey, nowMs);
-    await AppLog.i(source, LogTags.db, 'đã dọn cache thời tiết cũ (1 lần/ngày)');
+    await AppLog.i(
+      source,
+      LogTags.db,
+      'đã dọn cache thời tiết cũ (1 lần/ngày)',
+    );
   } catch (e, st) {
     await AppLog.w(
       source,
@@ -330,7 +390,8 @@ String foregroundStatusText(WeatherData data) {
   final uvStr = uvi != null ? ' · UV ${UvAdvice.classify(uvi).level}' : '';
   // Dữ liệu chưa làm mới được (fetch fail → cache cũ) HOẶC quá tuổi cảnh báo →
   // báo trung thực "dữ liệu cũ" thay vì để giờ `fetchedAt` cũ trông như mới.
-  final stale = data.fromCacheFallback ||
+  final stale =
+      data.fromCacheFallback ||
       data.age.inMinutes > AppConfig.alertMaxDataAgeMinutes;
   final staleStr = stale ? ' · ⚠️ dữ liệu cũ' : '';
   return '${condition.emoji} $tempStr · ${condition.label}'

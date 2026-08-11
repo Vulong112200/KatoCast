@@ -35,15 +35,28 @@ Future<Coordinates?> resolveBackgroundCoords({
     // Đọc store lỗi → coi như chưa có, các bước dưới vẫn chạy.
   }
 
+  // last-known của hệ thống chưa đủ tươi để dùng ngay, nhưng vẫn còn dùng được
+  // làm lưới cuối nếu không xin được fix mới (thà toạ độ cũ còn hơn bỏ chu kỳ).
+  Coordinates? staleLastKnown;
+  Duration? staleLastKnownAge;
+
   try {
     // --- 1. last-known của hệ thống ---
     final pos = await Geolocator.getLastKnownPosition();
     if (pos != null) {
       final age = DateTime.now().difference(pos.timestamp);
+      // ⚠️ CHỈ nhận ngay khi fix còn TƯƠI. Bản cũ nhận mọi fix tới 24 GIỜ tuổi
+      // rồi `return` luôn, nên bước 2 ("toạ độ cũ hơn 25' thì xin fix mới" —
+      // chính là bản sửa cho ca đi đường mà app báo thời tiết chỗ cũ) trở thành
+      // CODE CHẾT: hệ thống hầu như luôn có sẵn một last-known nào đó. Tệ hơn,
+      // `store.save()` bên dưới đóng dấu `savedAt = now` cho một toạ độ cũ hàng
+      // giờ, nên lần sau bước 2 cũng tưởng toạ độ còn tươi.
       if (age <=
-          const Duration(hours: AppConfig.backgroundLastKnownMaxAgeHours)) {
-        final coords =
-            Coordinates(latitude: pos.latitude, longitude: pos.longitude);
+          const Duration(minutes: AppConfig.backgroundCoordsFreshMinutes)) {
+        final coords = Coordinates(
+          latitude: pos.latitude,
+          longitude: pos.longitude,
+        );
         await store.save(coords);
         await _logResolved(
           source,
@@ -54,16 +67,37 @@ Future<Coordinates?> resolveBackgroundCoords({
         );
         return coords;
       }
-      await AppLog.i(source, LogTags.loc, 'last-known quá cũ',
-          data: {'tuổi': _fmtAge(age)});
+      // Chưa đủ tươi → thử xin fix mới ở bước 2; nếu không xin được thì bước 3
+      // vẫn còn dùng lại được nó (miễn chưa quá `backgroundLastKnownMaxAgeHours`).
+      await AppLog.i(
+        source,
+        LogTags.loc,
+        'last-known chưa đủ tươi → sẽ thử xin fix mới',
+        data: {
+          'tuổi': _fmtAge(age),
+          'ngưỡng': '${AppConfig.backgroundCoordsFreshMinutes}p',
+        },
+      );
+      if (age <=
+          const Duration(hours: AppConfig.backgroundLastKnownMaxAgeHours)) {
+        staleLastKnown = Coordinates(
+          latitude: pos.latitude,
+          longitude: pos.longitude,
+        );
+        staleLastKnownAge = age;
+      }
     } else {
-      await AppLog.i(source, LogTags.loc,
-          'hệ thống không có last-known (cache vị trí rỗng)');
+      await AppLog.i(
+        source,
+        LogTags.loc,
+        'hệ thống không có last-known (cache vị trí rỗng)',
+      );
     }
 
     // --- 2. Toạ độ đang có đã cũ → XIN FIX MỚI ---
     final storedAge = stored?.age;
-    final needFresh = stored == null ||
+    final needFresh =
+        stored == null ||
         storedAge == null ||
         storedAge >
             const Duration(minutes: AppConfig.backgroundCoordsFreshMinutes);
@@ -82,8 +116,21 @@ Future<Coordinates?> resolveBackgroundCoords({
       }
     }
 
-    // --- 3. Toạ độ đã lưu ---
-    if (stored == null) {
+    // --- 3. Lưới cuối: toạ độ đã lưu, hoặc last-known cũ ở bước 1 ---
+    //
+    // Chọn cái MỚI HƠN trong hai nguồn. Không có mốc tuổi thì coi như cũ nhất:
+    // thà dùng nguồn biết chắc tuổi còn hơn nguồn mù mờ.
+    var fallback = stored?.coords;
+    var age = stored?.age;
+    var origin = 'toạ độ ĐÃ LƯU (không xin được fix mới)';
+    if (staleLastKnown != null &&
+        (fallback == null || age == null || staleLastKnownAge! < age)) {
+      fallback = staleLastKnown;
+      age = staleLastKnownAge;
+      origin = 'last-known hệ thống CŨ (không xin được fix mới)';
+    }
+
+    if (fallback == null) {
       await AppLog.w(
         source,
         LogTags.loc,
@@ -91,23 +138,23 @@ Future<Coordinates?> resolveBackgroundCoords({
       );
       return null;
     }
-    final age = stored.age;
-    final tooOld = age != null &&
+    final tooOld =
+        age != null &&
         age > const Duration(hours: AppConfig.backgroundCoordsStaleWarnHours);
     await _logResolved(
       source,
-      stored.coords,
-      origin: 'toạ độ ĐÃ LƯU (không xin được fix mới)',
+      fallback,
+      origin: origin,
       age: age,
       previous: null,
       // Toạ độ quá cũ = thời tiết có thể KHÔNG phải nơi người dùng đang đứng.
       warn: tooOld,
       extraNote: tooOld
           ? 'toạ độ cũ hơn ${AppConfig.backgroundCoordsStaleWarnHours}h — thời '
-              'tiết có thể KHÔNG đúng nơi bạn đang ở'
+                'tiết có thể KHÔNG đúng nơi bạn đang ở'
           : null,
     );
-    return stored.coords;
+    return fallback;
   } catch (e, st) {
     await AppLog.e(
       source,
@@ -128,8 +175,11 @@ Future<Coordinates?> resolveBackgroundCoords({
 Future<Coordinates?> _requestFreshFix(String source) async {
   try {
     if (!await Geolocator.isLocationServiceEnabled()) {
-      await AppLog.w(source, LogTags.loc,
-          'dịch vụ vị trí đang TẮT → không xin được fix mới');
+      await AppLog.w(
+        source,
+        LogTags.loc,
+        'dịch vụ vị trí đang TẮT → không xin được fix mới',
+      );
       return null;
     }
     final permission = await Geolocator.checkPermission();
@@ -182,7 +232,8 @@ Future<void> _logResolved(
 }) async {
   final data = <String, Object?>{
     'nguồn': origin,
-    'toạ độ': '${coords.latitude.toStringAsFixed(4)},'
+    'toạ độ':
+        '${coords.latitude.toStringAsFixed(4)},'
         '${coords.longitude.toStringAsFixed(4)}',
     'tuổi': age == null ? 'chưa rõ' : _fmtAge(age),
     'khoá cache': coords.cacheKey,
@@ -208,9 +259,19 @@ Future<void> _logResolved(
   if (extraNote != null) data['cảnh báo'] = extraNote;
 
   if (warn) {
-    await AppLog.w(source, LogTags.loc, 'vị trí dùng cho chu kỳ này', data: data);
+    await AppLog.w(
+      source,
+      LogTags.loc,
+      'vị trí dùng cho chu kỳ này',
+      data: data,
+    );
   } else {
-    await AppLog.i(source, LogTags.loc, 'vị trí dùng cho chu kỳ này', data: data);
+    await AppLog.i(
+      source,
+      LogTags.loc,
+      'vị trí dùng cho chu kỳ này',
+      data: data,
+    );
   }
 }
 
